@@ -71,7 +71,7 @@ android {
         checkReleaseBuilds = false
     }
     packaging {
-        resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}", "/META-INF/DEPENDENCIES", "/META-INF/LICENSE*", "/META-INF/NOTICE*", "/META-INF/*.md")
     }
 }
 
@@ -99,4 +99,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     implementation("io.coil-kt:coil-compose:2.7.0")
+
+    // Чтение и запись тегов аудиофайлов
+    implementation("net.jthink:jaudiotagger:3.0.1")
 }

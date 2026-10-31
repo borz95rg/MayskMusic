@@ -32,6 +32,9 @@ sealed interface Route {
     data object Stats : Route
     data object Duplicates : Route
     data object FolderManager : Route
+    data object Ai : Route
+    data class Similar(val trackId: Long) : Route
+    data class Mood(val kind: com.maysk.music.data.MoodKind) : Route
 }
 
 val RootRoutes = listOf(Route.Home, Route.Tracks, Route.Folders, Route.Playlists, Route.MyMusic)
@@ -67,6 +70,13 @@ class UiActions(
     val delete: (List<Track>) -> Unit,
     val pickImage: ((Uri) -> Unit) -> Unit,
     val toast: (String) -> Unit,
+    /** Запросить у системы право изменять файлы (Android 10+), затем выполнить действие. */
+    val requestWrite: (List<Track>, () -> Unit) -> Unit,
+    /** Выполнить файловую операцию над треками в фоне, затем обновить библиотеку. */
+    val fileJob: (tracks: List<Track>, needsWrite: Boolean, successMessage: String, op: (Track) -> com.maysk.music.data.OpResult) -> Unit,
+    val editTags: (List<Track>) -> Unit,
+    val moveCopy: (List<Track>, Boolean) -> Unit,
+    val voice: () -> Unit,
 ) {
     fun play(list: List<Track>, index: Int = 0) {
         container.player.playTracks(list, index)

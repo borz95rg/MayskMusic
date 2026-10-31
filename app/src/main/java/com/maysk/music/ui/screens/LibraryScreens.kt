@@ -385,12 +385,46 @@ fun AlbumScreen(id: Long) {
     val lib by a.container.library.library.collectAsState()
     val album = lib.albums.firstOrNull { it.id == id }
     if (album == null) { MissingScreen(); return }
+    val covers by a.container.userData.albumCovers.collectAsState()
+    var menu by remember { mutableStateOf(false) }
+    var searching by remember { mutableStateOf(false) }
     TrackListScreen(
         title = album.title,
         tracks = album.tracks,
         subtitle = "${album.artist}${if (album.year > 0) " · ${album.year}" else ""} · ${album.tracks.size} треков",
         headerArt = album.artUri,
         headerSeed = album.id,
+        actions = {
+            Box {
+                IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "Ещё", tint = LocalMaysk.current.text) }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text(if (searching) "Поиск обложки…" else "Найти обложку онлайн") }, enabled = !searching, onClick = {
+                        menu = false
+                        searching = true
+                        a.toast("Ищу обложку «${album.title}»…")
+                        a.container.covers.findOne(album) { ok ->
+                            searching = false
+                            a.toast(if (ok) "Обложка найдена" else "Обложка не найдена")
+                        }
+                    })
+                    DropdownMenuItem(text = { Text("Выбрать обложку из галереи") }, onClick = {
+                        menu = false
+                        a.pickImage { uri ->
+                            a.container.userData.importCover(uri, "album_${album.id}")?.let {
+                                a.container.userData.setAlbumCover(album.id, it)
+                                a.container.library.applyFilters()
+                            }
+                        }
+                    })
+                    if (album.id in covers) DropdownMenuItem(text = { Text("Вернуть исходную обложку") }, onClick = {
+                        menu = false
+                        a.container.userData.setAlbumCover(album.id, null)
+                        a.container.library.applyFilters()
+                    })
+                    DropdownMenuItem(text = { Text("Редактировать теги альбома") }, onClick = { menu = false; a.editTags(album.tracks) })
+                }
+            }
+        },
     )
 }
 

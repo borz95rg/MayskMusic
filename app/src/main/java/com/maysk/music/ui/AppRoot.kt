@@ -7,7 +7,10 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
+import android.content.pm.PackageManager
 import android.provider.MediaStore
+import android.speech.RecognizerIntent
+import androidx.core.content.ContextCompat
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
@@ -80,15 +83,22 @@ import androidx.palette.graphics.Palette
 import com.maysk.music.AppContainer
 import com.maysk.music.data.MiniPlayerStyle
 import com.maysk.music.data.ThemePreset
+import com.maysk.music.data.FileOps
 import com.maysk.music.data.Track
 import com.maysk.music.ui.components.AddToPlaylistDialog
+import com.maysk.music.ui.components.BatchTagDialog
+import com.maysk.music.ui.components.MoveCopyDialog
+import com.maysk.music.ui.components.TagEditorDialog
 import com.maysk.music.ui.components.AppBackground
 import com.maysk.music.ui.components.Artwork
 import com.maysk.music.ui.components.ConfirmDialog
 import com.maysk.music.ui.components.GlassCard
 import com.maysk.music.ui.components.GradientButton
 import com.maysk.music.ui.components.TrackMenuSheet
+import com.maysk.music.ui.screens.AiScreen
 import com.maysk.music.ui.screens.AlbumScreen
+import com.maysk.music.ui.screens.MoodScreen
+import com.maysk.music.ui.screens.SimilarScreen
 import com.maysk.music.ui.screens.AppearanceScreen
 import com.maysk.music.ui.screens.ArtistScreen
 import com.maysk.music.ui.screens.DuplicatesScreen
@@ -152,6 +162,12 @@ private fun MainScaffold(container: AppContainer) {
     var playlistTracks by remember { mutableStateOf<List<Track>?>(null) }
     var deleteTracks by remember { mutableStateOf<List<Track>?>(null) }
     var imageCallback by remember { mutableStateOf<((Uri) -> Unit)?>(null) }
+    var pendingWrite by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var tagTracks by remember { mutableStateOf<List<Track>?>(null) }
+    var moveTracks by remember { mutableStateOf<Pair<List<Track>, Boolean>?>(null) }
+    val toastRef: (String) -> Unit = remember {
+        { msg: String -> scope.launch { snackbar.currentSnackbarData?.dismiss(); snackbar.showSnackbar(msg) }; Unit }
+    }
 
     val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
         if (res.resultCode == Activity.RESULT_OK) {
@@ -162,6 +178,60 @@ private fun MainScaffold(container: AppContainer) {
     val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) imageCallback?.invoke(uri)
         imageCallback = null
+    }
+
+    val writeLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
+        val action = pendingWrite
+        pendingWrite = null
+        if (res.resultCode == Activity.RESULT_OK) action?.invoke() else toastRef("Изменение файлов не разрешено")
+    }
+    val legacyWriteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        val action = pendingWrite
+        pendingWrite = null
+        if (ok) action?.invoke() else toastRef("Нужно разрешение на запись в память")
+    }
+    val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        val text = res.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        if (res.resultCode == Activity.RESULT_OK && !text.isNullOrBlank()) {
+            toastRef("«$text» → ${VoiceCommands.handle(text, container)}")
+        }
+    }
+
+    fun requestWrite(tracks: List<Track>, onGranted: () -> Unit) {
+        val cr = context.contentResolver
+        when {
+            tracks.isEmpty() -> onGranted()
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> try {
+                pendingWrite = onGranted
+                val pi = MediaStore.createWriteRequest(cr, tracks.map { it.uri })
+                writeLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+            } catch (e: Exception) {
+                pendingWrite = null
+                toastRef("Не удалось запросить доступ к файлам")
+            }
+            Build.VERSION.SDK_INT == Build.VERSION_CODES.Q -> {
+                // Android 10 спрашивает по одному файлу: проверяем и запрашиваем по очереди.
+                var request: android.content.IntentSender? = null
+                for (t in tracks) {
+                    try {
+                        cr.openFileDescriptor(t.uri, "rw")?.close()
+                    } catch (e: SecurityException) {
+                        if (e is RecoverableSecurityException) { request = e.userAction.actionIntent.intentSender; break }
+                    } catch (_: Exception) { }
+                }
+                val sender = request
+                if (sender == null) onGranted()
+                else {
+                    pendingWrite = { requestWrite(tracks, onGranted) }
+                    writeLauncher.launch(IntentSenderRequest.Builder(sender).build())
+                }
+            }
+            ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED -> onGranted()
+            else -> {
+                pendingWrite = onGranted
+                legacyWriteLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        }
     }
 
     val actions = remember {
@@ -176,7 +246,36 @@ private fun MainScaffold(container: AppContainer) {
                 imageCallback = cb
                 imageLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             },
-            toast = { msg -> scope.launch { snackbar.currentSnackbarData?.dismiss(); snackbar.showSnackbar(msg) } },
+            toast = toastRef,
+            requestWrite = { tracks, onGranted -> requestWrite(tracks, onGranted) },
+            fileJob = { tracks, needsWrite, success, op ->
+                val run: () -> Unit = {
+                    container.scope.launch {
+                        toastRef(if (tracks.size == 1) "Обработка…" else "Обработка ${tracks.size} файлов…")
+                        val results = withContext(Dispatchers.IO) { tracks.map { op(it) } }
+                        val scan = results.flatMap { it.scan }
+                        withContext(Dispatchers.IO) { runCatching { FileOps.rescanFiles(context, scan) } }
+                        container.library.rescan(debounceMs = 400)
+                        val errors = results.mapNotNull { it.error }
+                        toastRef(
+                            when {
+                                errors.isEmpty() -> success
+                                errors.size == results.size -> errors.first()
+                                else -> "$success. Ошибок: ${errors.size} (${errors.first()})"
+                            }
+                        )
+                    }
+                }
+                if (needsWrite) requestWrite(tracks, run) else run()
+            },
+            editTags = { tagTracks = it },
+            moveCopy = { tracks, copy -> moveTracks = tracks to copy },
+            voice = {
+                val intent = android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                    .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    .putExtra(RecognizerIntent.EXTRA_PROMPT, "Например: «включи Imagine Dragons», «пауза», «таймер 30 минут»")
+                try { voiceLauncher.launch(intent) } catch (e: Exception) { toastRef("Распознавание речи недоступно на этом устройстве") }
+            },
         )
     }
 
@@ -228,6 +327,11 @@ private fun MainScaffold(container: AppContainer) {
                 },
             )
         }
+        tagTracks?.let { list ->
+            if (list.size == 1) TagEditorDialog(list.first()) { tagTracks = null }
+            else BatchTagDialog(list) { tagTracks = null }
+        }
+        moveTracks?.let { (list, copy) -> MoveCopyDialog(list, copy) { moveTracks = null } }
         UpdateDialogs(container)
     }
 }
@@ -280,6 +384,9 @@ private fun RouteContent(route: Route) {
         Route.Stats -> StatsScreen()
         Route.Duplicates -> DuplicatesScreen()
         Route.FolderManager -> FolderManagerScreen()
+        Route.Ai -> AiScreen()
+        is Route.Similar -> SimilarScreen(route.trackId)
+        is Route.Mood -> MoodScreen(route.kind)
     }
 }
 

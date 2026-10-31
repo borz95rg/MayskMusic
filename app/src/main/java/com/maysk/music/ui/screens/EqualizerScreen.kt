@@ -1,6 +1,7 @@
 package com.maysk.music.ui.screens
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -147,6 +148,8 @@ fun EqualizerScreen() {
                         onValue = { v -> fx.update { it.copy(loudnessGainMb = (v * 1500).toInt()) } })
                 }
             }
+            Spacer(Modifier.height(12.dp))
+            BalanceFadeCard()
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 GradientButton("Сохранить профиль", Modifier.weight(1f), enabled = caps.available) { saving = true }
@@ -172,6 +175,67 @@ fun EqualizerScreen() {
             fx.update { it.copy(customProfiles = it.customProfiles + (n to levels), profile = n) }
             saving = false
             a.toast("Профиль «$n» сохранён")
+        }
+    }
+}
+
+@Composable
+private fun BalanceFadeCard() {
+    val a = LocalActions.current
+    val c = LocalMaysk.current
+    val settings by a.container.settings.state.collectAsState()
+    var bal by remember(settings.balance) { mutableStateOf(settings.balance) }
+    var fade by remember(settings.crossfadeSec) { mutableStateOf(settings.crossfadeSec.toFloat()) }
+    GlassCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Баланс L/R", color = c.text, modifier = Modifier.weight(1f))
+                Text(
+                    when {
+                        kotlin.math.abs(bal) < 0.02f -> "По центру"
+                        bal < 0 -> "Левее ${(-bal * 100).toInt()}%"
+                        else -> "Правее ${(bal * 100).toInt()}%"
+                    },
+                    color = c.textDim, style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("L", color = c.textDim)
+                Slider(
+                    value = bal,
+                    onValueChange = { bal = if (kotlin.math.abs(it) < 0.04f) 0f else it },
+                    onValueChangeFinished = { a.container.settings.update { it.copy(balance = bal) } },
+                    valueRange = -1f..1f,
+                    colors = SliderDefaults.colors(thumbColor = c.accent, activeTrackColor = c.accent),
+                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                )
+                Text("R", color = c.textDim)
+            }
+            if (bal != 0f) {
+                Text(
+                    "Сбросить в центр",
+                    color = c.accent,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.clickable { bal = 0f; a.container.settings.update { it.copy(balance = 0f) } }.padding(vertical = 4.dp),
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Плавный переход между треками", color = c.text, modifier = Modifier.weight(1f))
+                Text(if (fade < 1f) "Выкл" else "${fade.toInt()} сек", color = c.textDim, style = MaterialTheme.typography.bodySmall)
+            }
+            Slider(
+                value = fade,
+                onValueChange = { fade = it },
+                onValueChangeFinished = { a.container.settings.update { it.copy(crossfadeSec = fade.toInt()) } },
+                valueRange = 0f..12f,
+                steps = 11,
+                colors = SliderDefaults.colors(thumbColor = c.accent, activeTrackColor = c.accent),
+            )
+            Text(
+                "Конец трека плавно затихает, следующий плавно нарастает. Баланс работает для стерео-записей.",
+                color = c.textDim, style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }

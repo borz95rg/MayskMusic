@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.media.AudioManager
 import androidx.media3.exoplayer.ExoPlayer
+import com.maysk.music.data.CoverFinder
 import com.maysk.music.data.LibraryRepository
 import com.maysk.music.data.SettingsStore
 import com.maysk.music.data.UserDataStore
@@ -59,6 +60,8 @@ class AppContainer(val context: Context) {
     )
 
     val updates: UpdateManager = UpdateManager(context, settings, scope)
+
+    val covers: CoverFinder = CoverFinder(context, userData, scope) { library.applyFilters() }
 
     init {
         scope.launch {

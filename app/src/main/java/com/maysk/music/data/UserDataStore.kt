@@ -48,6 +48,9 @@ class UserDataStore(private val context: Context) {
     private val _folderCovers = MutableStateFlow<Map<String, String>>(emptyMap())
     val folderCovers: StateFlow<Map<String, String>> = _folderCovers.asStateFlow()
 
+    private val _albumCovers = MutableStateFlow<Map<Long, String>>(emptyMap())
+    val albumCovers: StateFlow<Map<Long, String>> = _albumCovers.asStateFlow()
+
     private val _eq = MutableStateFlow(EqState())
     val eq: StateFlow<EqState> = _eq.asStateFlow()
 
@@ -118,6 +121,13 @@ class UserDataStore(private val context: Context) {
         persist()
     }
 
+    // ---------- Обложки альбомов ----------
+    fun setAlbumCover(albumId: Long, path: String?) {
+        _albumCovers.value = if (path == null) _albumCovers.value - albumId else _albumCovers.value + (albumId to path)
+        ArtOverrides.albums = _albumCovers.value
+        persist()
+    }
+
     // ---------- Эквалайзер ----------
     fun updateEq(f: (EqState) -> EqState) { _eq.value = f(_eq.value); persist() }
 
@@ -163,6 +173,7 @@ class UserDataStore(private val context: Context) {
         o.put("lyrics", JSONObject().apply { _lyrics.value.forEach { (k, v) -> put(k.toString(), v) } })
         o.put("folderNames", JSONObject().apply { _folderNames.value.forEach { (k, v) -> put(k, v) } })
         o.put("folderCovers", JSONObject().apply { _folderCovers.value.forEach { (k, v) -> put(k, v) } })
+        o.put("albumCovers", JSONObject().apply { _albumCovers.value.forEach { (k, v) -> put(k.toString(), v) } })
         val e = _eq.value
         o.put("eq", JSONObject().put("enabled", e.enabled).put("profile", e.profile)
             .put("bands", JSONArray(e.bandLevels)).put("bass", e.bassBoost).put("virt", e.virtualizer)
@@ -205,6 +216,10 @@ class UserDataStore(private val context: Context) {
         o.optJSONObject("lyrics")?.let { l -> _lyrics.value = l.keys().asSequence().associate { it.toLong() to l.getString(it) } }
         o.optJSONObject("folderNames")?.let { f -> _folderNames.value = f.keys().asSequence().associateWith { f.getString(it) } }
         o.optJSONObject("folderCovers")?.let { f -> _folderCovers.value = f.keys().asSequence().associateWith { f.getString(it) } }
+        o.optJSONObject("albumCovers")?.let { f ->
+            _albumCovers.value = f.keys().asSequence().mapNotNull { k -> k.toLongOrNull()?.let { it to f.getString(k) } }.toMap()
+            ArtOverrides.albums = _albumCovers.value
+        }
         o.optJSONObject("eq")?.let { e ->
             val custom = e.optJSONObject("custom")
             _eq.value = EqState(

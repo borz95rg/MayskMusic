@@ -45,6 +45,10 @@ data class AppSettings(
     val minDurationSec: Int = 20,
     val autoUpdateCheck: Boolean = true,
     val customUpdateRepo: String = "",
+    /** Плавный переход между треками (затухание/нарастание), секунды. 0 = выкл. */
+    val crossfadeSec: Int = 0,
+    /** Баланс: -1 = только левый, 0 = центр, 1 = только правый. */
+    val balance: Float = 0f,
 ) {
     val animationsEnabled: Boolean get() = animSpeed > 0f
 }
@@ -132,6 +136,8 @@ class SettingsStore(context: Context) {
             put("minDurationSec", s.minDurationSec)
             put("autoUpdateCheck", s.autoUpdateCheck)
             put("customUpdateRepo", s.customUpdateRepo)
+            put("crossfadeSec", s.crossfadeSec)
+            put("balance", s.balance.toDouble())
         }
 
         fun fromJson(o: JSONObject): AppSettings {
@@ -160,6 +166,8 @@ class SettingsStore(context: Context) {
                 minDurationSec = o.optInt("minDurationSec", d.minDurationSec),
                 autoUpdateCheck = o.optBoolean("autoUpdateCheck", d.autoUpdateCheck),
                 customUpdateRepo = o.optString("customUpdateRepo", d.customUpdateRepo),
+                crossfadeSec = o.optInt("crossfadeSec", d.crossfadeSec),
+                balance = o.optDouble("balance", d.balance.toDouble()).toFloat(),
             )
         }
 

@@ -27,6 +27,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.ContentCopy
@@ -95,6 +97,8 @@ fun MyMusicScreen() {
     val cols = if (LocalUi.current.simpleMode) 2 else 3
 
     val tiles = listOf(
+        Tile("Maysk AI", null, Icons.Rounded.AutoAwesome, c.accent3) { a.nav.push(Route.Ai) },
+        Tile("Голос", null, Icons.Rounded.Mic, c.accent2) { a.voice() },
         Tile("Любимое", "${lib.tracks.count { it.id in fav }}", Icons.Rounded.Favorite, c.accent3) { a.nav.push(Route.MixR(MixKind.FAVORITES)) },
         Tile("История", "${history.size}", Icons.Rounded.History, c.accent2) { a.nav.push(Route.MixR(MixKind.HISTORY)) },
         Tile("Часто слушаю", null, Icons.Rounded.TrendingUp, c.accent) { a.nav.push(Route.MixR(MixKind.FREQUENT)) },

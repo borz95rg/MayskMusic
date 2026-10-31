@@ -3,6 +3,7 @@ package com.maysk.music.data
 import android.content.ContentUris
 import android.net.Uri
 import android.provider.MediaStore
+import java.io.File
 
 data class Track(
     val id: Long,
@@ -22,10 +23,23 @@ data class Track(
 ) {
     val uri: Uri get() = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
     val artUri: Uri get() = albumArtUri(albumId)
+    val fileName: String get() = path.substringAfterLast('/')
+    val extension: String get() = path.substringAfterLast('.', "").lowercase()
     val folderName: String get() = folderPath.substringAfterLast('/')
 }
 
+/** Обложки альбомов, выбранные пользователем или найденные онлайн (albumId -> путь к файлу). */
+object ArtOverrides {
+    @Volatile
+    var albums: Map<Long, String> = emptyMap()
+}
+
 fun albumArtUri(albumId: Long): Uri =
+    ArtOverrides.albums[albumId]?.let { Uri.fromFile(File(it)) }
+        ?: ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), albumId)
+
+/** Обложка из системы (без пользовательской замены). */
+fun systemAlbumArtUri(albumId: Long): Uri =
     ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), albumId)
 
 data class Album(val id: Long, val title: String, val artist: String, val year: Int, val tracks: List<Track>) {

@@ -22,6 +22,10 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.DriveFileMove
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
@@ -185,6 +189,14 @@ fun TrackMenuSheet(tracks: List<Track>, onDismiss: () -> Unit) {
             SheetItem(if (allFav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder, if (allFav) "Убрать из любимого" else "В любимое") {
                 actions.container.userData.setFavorite(tracks.map { it.id }, !allFav); onDismiss()
             }
+            if (single != null) {
+                SheetItem(Icons.Rounded.AutoAwesome, "Похожие треки") { onDismiss(); actions.nav.push(Route.Similar(single.id)) }
+            }
+            SheetItem(Icons.Rounded.Edit, if (single != null) "Редактировать теги" else "Редактировать теги (${tracks.size})") {
+                onDismiss(); actions.editTags(tracks)
+            }
+            SheetItem(Icons.Rounded.DriveFileMove, "Переместить в папку") { onDismiss(); actions.moveCopy(tracks, false) }
+            SheetItem(Icons.Rounded.ContentCopy, "Копировать в папку") { onDismiss(); actions.moveCopy(tracks, true) }
             if (single != null) {
                 SheetItem(Icons.Rounded.Album, "Альбом: ${single.album}") { onDismiss(); actions.nav.push(Route.AlbumR(single.albumId)) }
                 SheetItem(Icons.Rounded.Person, "Исполнитель: ${single.artist}") { onDismiss(); actions.nav.push(Route.ArtistR(single.artist)) }

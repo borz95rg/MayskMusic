@@ -25,6 +25,7 @@ import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Refresh
@@ -115,6 +116,7 @@ fun HomeScreen() {
             },
         ) {
             if (scanning) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = c.accent)
+            IconButton(onClick = { a.voice() }) { Icon(Icons.Rounded.Mic, "Голосовая команда", tint = c.text) }
             IconButton(onClick = { a.nav.push(Route.Search) }) { Icon(Icons.Rounded.Search, "Поиск", tint = c.text) }
             IconButton(onClick = { a.nav.push(Route.Settings) }) { Icon(Icons.Rounded.Settings, "Настройки", tint = c.text) }
         }
