@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Maysk Music</string>
+    <string name="widget_desc">Мини-плеер Maysk Music</string>
+    <string name="nothing_playing">Ничего не играет</string>
+</resources>

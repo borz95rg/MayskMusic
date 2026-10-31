@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- двойная нота -->
+    <path android:pathData="M46,34 L74,28 L74,35 L50,40 L50,68 L46,68 Z M70,29 L74,29 L74,62 L70,62 Z M36,68 a7,6 0 1,0 14,0 a7,6 0 1,0 -14,0 Z M60,62 a7,6 0 1,0 14,0 a7,6 0 1,0 -14,0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear"
+                android:startX="38" android:startY="30" android:endX="76" android:endY="78">
+                <item android:offset="0" android:color="#FF38BDF8"/>
+                <item android:offset="0.5" android:color="#FF8B5CF6"/>
+                <item android:offset="1" android:color="#FFEC4899"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- волна -->
+    <path android:fillColor="#AA8B5CF6" android:pathData="M30,50h2v10h-2z M34,46h2v18h-2z M38,52h2v6h-2z"/>
+</vector>
