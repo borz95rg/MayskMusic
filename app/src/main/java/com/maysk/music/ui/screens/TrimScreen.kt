@@ -19,6 +19,7 @@ import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -74,6 +75,7 @@ fun TrimScreen(initialTrackId: Long = -1L) {
         )
     }
     var showSaveDialog by remember { mutableStateOf(false) }
+    var outFormat by remember { mutableStateOf("m4a") }
 
     // Текущий трек из плеера или initialTrackId
     LaunchedEffect(lib.tracks, initialTrackId, playerState.currentId) {
@@ -238,6 +240,8 @@ fun TrimScreen(initialTrackId: Long = -1L) {
         SaveTrimDialog(
             name = saveName,
             onNameChange = { saveName = it },
+            format = outFormat,
+            onFormatChange = { outFormat = it },
             onDismiss = { if (!busy) showSaveDialog = false },
             onConfirm = {
                 showSaveDialog = false
@@ -248,6 +252,7 @@ fun TrimScreen(initialTrackId: Long = -1L) {
                             ctx, trackToSave, startMs.toLong(), endMs.toLong(),
                             asCopy = true,
                             customName = saveName,
+                            format = outFormat,
                         )
                     }
                     busy = false
@@ -264,15 +269,16 @@ fun TrimScreen(initialTrackId: Long = -1L) {
     }
 }
 
-/** Диалог сохранения обрезанного фрагмента: название файла и подтверждение. */
+/** Диалог сохранения обрезанного фрагмента: название файла, формат и подтверждение. */
 @Composable
 private fun SaveTrimDialog(
     name: String,
     onNameChange: (String) -> Unit,
+    format: String,
+    onFormatChange: (String) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    val c = LocalMaysk.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Сохранить обрезку") },
@@ -286,12 +292,21 @@ private fun SaveTrimDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Файл сохранится в формате M4A (AAC) в Music/Maysk/.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = c.textDim,
-                )
+                Spacer(Modifier.height(12.dp))
+                Text("Формат", style = MaterialTheme.typography.labelMedium)
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = format == "m4a",
+                        onClick = { onFormatChange("m4a") },
+                        label = { Text("M4A (AAC)") },
+                    )
+                    FilterChip(
+                        selected = format == "mp3",
+                        onClick = { onFormatChange("mp3") },
+                        label = { Text("MP3") },
+                    )
+                }
             }
         },
         confirmButton = {
