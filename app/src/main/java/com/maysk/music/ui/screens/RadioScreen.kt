@@ -107,10 +107,13 @@ private val fallback: Map<RadioRegion, List<RadioStation>> = mapOf(
         RadioStation("energy", "Energy", "Dance", "https://pub0102.101.ru:8443/stream/trust/mp3/128/99", 0xFFFF5722),
     ),
     RadioRegion.CHECHEN to listOf(
-        RadioStation("chechen_folk", "Chechen Folk Radio", "Folk", "https://listen1.myradio24.com/5967", 0xFF10B981),
+        RadioStation("chechen_main", "Чеченское радио", "Нохчийн · Folk", "https://stream.radio05.ru/chechenskoe_radio_128", 0xFF10B981),
+        RadioStation("kavkaz", "Радио Кавказ", "Кавказ · Music", "https://stream.radio05.ru/radio_kavkaz_128", 0xFF059669),
+        RadioStation("kavkaz_hit", "Кавказ Хит", "Hits · Кавказ", "https://kavkazhit.hostingradio.ru:8017/kavkazhit96.mp3", 0xFF34D399),
     ),
     RadioRegion.INGUSH to listOf(
-        RadioStation("ingush_fallback", "Caucasus Radio", "Folk", "https://lux-radio.com:8015/stream", 0xFF3B82F6),
+        RadioStation("kavkaz_ing", "Радио Кавказ", "Кавказ", "https://stream.radio05.ru/radio_kavkaz_128", 0xFF3B82F6),
+        RadioStation("kavkaz_hit_ing", "Кавказ Хит", "Hits · Кавказ", "https://kavkazhit.hostingradio.ru:8017/kavkazhit96.mp3", 0xFF60A5FA),
     ),
 )
 
@@ -165,25 +168,42 @@ private suspend fun fetchFromRadioBrowser(query: String, limit: Int = 15): List<
 }
 
 private suspend fun loadRegionStations(region: RadioRegion): List<RadioStation> = coroutineScope {
-    val queries = when (region) {
-        RadioRegion.KAZAKH -> listOf("qazaq", "kazakhstan", "shalqar", "almaty radio")
-        RadioRegion.RUSSIAN -> listOf("europa plus", "nashe radio", "record radio", "dfm")
-        RadioRegion.CHECHEN -> listOf("chechen", "grozny", "caucasus", "dagestan")
-        RadioRegion.INGUSH -> listOf("ingush", "magas", "caucasus")
+    val keywords = when (region) {
+        RadioRegion.CHECHEN -> listOf("чечен", "chechen", "вайнах", "vaynah", "нохч", "grozny", "грозн")
+        RadioRegion.INGUSH -> listOf("ингуш", "ingush", "magas", "онгушт", "ongusht")
+        RadioRegion.KAZAKH -> listOf("qazaq", "қазақ", "kazakh", "shalqar", "шалқар", "almaty", "astana", "казах")
+        RadioRegion.RUSSIAN -> listOf("europa", "наше", "record", "dfm", "ретро", "maximum", "monte", "energy", "русск")
     }
-    val fromApi = queries.map { q -> async { fetchFromRadioBrowser(q, 8) } }.awaitAll().flatten()
+    val queries = when (region) {
+        RadioRegion.KAZAKH -> listOf("qazaq", "shalqar", "kazakhstan")
+        RadioRegion.RUSSIAN -> listOf("europa plus", "nashe radio", "record radio")
+        // Не ищем по caucasus/dagestan — туда попадают левые станции
+        RadioRegion.CHECHEN -> listOf("чеченское радио", "chechen radio")
+        RadioRegion.INGUSH -> listOf("ингушетия радио", "ingush radio")
+    }
+    val fromApi = queries.map { q -> async { fetchFromRadioBrowser(q, 12) } }.awaitAll().flatten()
         .distinctBy { it.streamUrl }
-        .take(20)
+        .filter { st ->
+            val n = st.name.lowercase()
+            keywords.any { k -> n.contains(k.lowercase()) }
+        }
+        .take(15)
 
     val fallbackList = fallback[region] ?: emptyList()
-    val candidates = (fromApi + fallbackList).distinctBy { it.streamUrl }
+    // Для Чечни/Ингушетии приоритет — проверенный curated-список
+    val candidates = when (region) {
+        RadioRegion.CHECHEN, RadioRegion.INGUSH -> (fallbackList + fromApi).distinctBy { it.streamUrl }
+        else -> (fromApi + fallbackList).distinctBy { it.streamUrl }
+    }
     val checked = candidates.map { st -> async { if (probeUrl(st.streamUrl)) st else null } }
         .awaitAll()
         .filterNotNull()
 
     if (checked.isNotEmpty()) return@coroutineScope checked
-    val probedFallback = fallbackList.filter { probeUrl(it.streamUrl) }
-    if (probedFallback.isNotEmpty()) return@coroutineScope probedFallback
+    // Даже если probe не прошёл (сеть/HEAD), для curated всё равно показываем — плеер сам попробует
+    if (region == RadioRegion.CHECHEN || region == RadioRegion.INGUSH) {
+        return@coroutineScope fallbackList
+    }
     fallbackList
 }
 
