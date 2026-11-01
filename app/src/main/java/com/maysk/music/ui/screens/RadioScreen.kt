@@ -70,6 +70,8 @@ data class RadioStation(
     val genre: String,
     val streamUrl: String,
     val color: Long,
+    /** Резервные адреса потока: используются, если основной не отвечает. */
+    val backupUrls: List<String> = emptyList(),
 )
 
 enum class RadioRegion(val color: Long) {
@@ -89,7 +91,10 @@ private fun regionTitle(r: RadioRegion, s: com.maysk.music.ui.Strings) = when (r
 /** Запасные станции (если API недоступен). */
 private val fallback: Map<RadioRegion, List<RadioStation>> = mapOf(
     RadioRegion.KAZAKH to listOf(
-        RadioStation("qazaq", "Qazaq radiosy", "Қазақ · Folk", "https://radio-streams.kaztrk.kz/qazradio/qazradio/icecast.audio", 0xFF0EA5E9),
+        RadioStation("qazaq", "Qazaq radiosy", "Қазақ · Folk", "https://radio-streams.kaztrk.kz/qazradio/qazradio/icecast.audio", 0xFF0EA5E9,
+            backupUrls = listOf("https://qazaqradiosy.kz/live")),
+        RadioStation("zhuldyz", "Жулдыз FM", "Қазақ · Pop", "https://online.zhuldyzfm.kz/zhuldyzfm", 0xFF6366F1,
+            backupUrls = listOf("https://live.zhuldyzfm.kz/stream")),
         RadioStation("shalqar", "Shalqar", "Қазақ · Culture", "https://radio-streams.kaztrk.kz/shalqar/shalqar/icecast.audio", 0xFF0284C7),
         RadioStation("avto_kz", "Авторадио KZ", "Pop", "http://178.88.167.62:8080/AVTORADIO_192", 0xFFF59E0B),
         RadioStation("love_kz", "Love Radio KZ", "Hits", "https://stream.gakku.tv:8443/love128.mp3", 0xFFEC4899),
@@ -97,7 +102,13 @@ private val fallback: Map<RadioRegion, List<RadioStation>> = mapOf(
         RadioStation("beu", "beu FM", "Hits", "https://stream.beufm.kz/beufm", 0xFF14B8A6),
     ),
     RadioRegion.RUSSIAN to listOf(
-        RadioStation("europa", "Europa Plus", "Pop", "https://ep128.hostingradio.ru:8030/ep128", 0xFFE91E63),
+        RadioStation("europa", "Europa Plus", "Pop", "https://ep128.hostingradio.ru:8030/ep128", 0xFFE91E63,
+            backupUrls = listOf("https://ep256.hostingradio.ru:8052/ep256.mp3")),
+        RadioStation("rusradio", "Русское Радио", "Pop", "https://icecast.russkoeradio.cdnvideo.ru/rr_h.mp3", 0xFFEF4444,
+            backupUrls = listOf("https://pub0302.101.ru:8443/stream/air/aac/64/100")),
+        RadioStation("dorognoe", "Дорожное Радио", "Pop · Road", "https://dorognoe.hostingradio.ru:8000/dorognoe", 0xFFF59E0B,
+            backupUrls = listOf("https://icecast-dorognoe.cdnvideo.ru/dorognoe")),
+        RadioStation("chanson", "Радио Шансон", "Chanson", "https://chanson.hostingradio.ru:8041/chanson128.mp3", 0xFF92400E),
         RadioStation("record", "Record", "Dance", "https://radiorecord.hostingradio.ru/rr_main96.aacp", 0xFF9C27B0),
         RadioStation("dfm", "DFM", "Club", "https://dfm.hostingradio.ru/dfm96.aacp", 0xFF2196F3),
         RadioStation("nashe", "Наше Радио", "Rock", "https://nashe1.hostingradio.ru/nashe-128.mp3", 0xFFE91E63),
@@ -108,10 +119,14 @@ private val fallback: Map<RadioRegion, List<RadioStation>> = mapOf(
     ),
     RadioRegion.CHECHEN to listOf(
         RadioStation("chechen_main", "Чеченское радио", "Нохчийн · Folk", "https://stream.radio05.ru/chechenskoe_radio_128", 0xFF10B981),
+        RadioStation("groznyfm", "Грозный FM", "Нохчийн · Pop", "https://grozny.tv/live_radio.m3u8", 0xFF22C55E,
+            backupUrls = listOf("http://online.groztrk.net:8000/vaynakh")),
         RadioStation("kavkaz", "Радио Кавказ", "Кавказ · Music", "https://stream.radio05.ru/radio_kavkaz_128", 0xFF059669),
         RadioStation("kavkaz_hit", "Кавказ Хит", "Hits · Кавказ", "https://kavkazhit.hostingradio.ru:8017/kavkazhit96.mp3", 0xFF34D399),
     ),
     RadioRegion.INGUSH to listOf(
+        RadioStation("ingush_fm", "Радио Ингушетия", "Ингушетия", "http://77.87.97.62:8086/ingradio", 0xFF2563EB,
+            backupUrls = listOf("http://stream.ingushetia.ru:8000/live")),
         RadioStation("kavkaz_ing", "Радио Кавказ", "Кавказ", "https://stream.radio05.ru/radio_kavkaz_128", 0xFF3B82F6),
         RadioStation("kavkaz_hit_ing", "Кавказ Хит", "Hits · Кавказ", "https://kavkazhit.hostingradio.ru:8017/kavkazhit96.mp3", 0xFF60A5FA),
     ),
@@ -134,6 +149,13 @@ private suspend fun probeUrl(url: String, timeoutMs: Int = 4000): Boolean = with
     } catch (_: Exception) {
         false
     }
+}
+
+/** Проверяет все адреса станции; рабочий становится основным, остальные рабочие — резервными. */
+private suspend fun resolveStation(st: RadioStation): RadioStation? = coroutineScope {
+    val urls = (listOf(st.streamUrl) + st.backupUrls).distinct()
+    val working = urls.map { u -> async { u to probeUrl(u) } }.awaitAll().filter { it.second }.map { it.first }
+    if (working.isEmpty()) null else st.copy(streamUrl = working.first(), backupUrls = working.drop(1))
 }
 
 private suspend fun fetchFromRadioBrowser(query: String, limit: Int = 15): List<RadioStation> = withContext(Dispatchers.IO) {
@@ -195,7 +217,7 @@ private suspend fun loadRegionStations(region: RadioRegion): List<RadioStation> 
         RadioRegion.CHECHEN, RadioRegion.INGUSH -> (fallbackList + fromApi).distinctBy { it.streamUrl }
         else -> (fromApi + fallbackList).distinctBy { it.streamUrl }
     }
-    val checked = candidates.map { st -> async { if (probeUrl(st.streamUrl)) st else null } }
+    val checked = candidates.map { st -> async { resolveStation(st) } }
         .awaitAll()
         .filterNotNull()
 
@@ -219,6 +241,10 @@ fun RadioScreen() {
     val playerState by a.container.player.state.collectAsState()
     val playingTitle = playerState.title
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        a.container.player.onStreamMessage = { msg -> a.toast(msg) }
+    }
 
     LaunchedEffect(region, refreshKey) {
         val r = region ?: return@LaunchedEffect
@@ -307,7 +333,7 @@ fun RadioScreen() {
                         val isPlaying = playerState.isPlaying &&
                             playingTitle.contains(station.name, ignoreCase = true)
                         RadioCard(station, isPlaying) {
-                            a.container.player.playUri(Uri.parse(station.streamUrl), station.name)
+                            a.container.player.playStream(listOf(station.streamUrl) + station.backupUrls, station.name)
                         }
                     }
                 }

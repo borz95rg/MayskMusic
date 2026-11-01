@@ -7,6 +7,7 @@ import androidx.core.content.ContextCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -63,6 +64,14 @@ class PlayerController(
     private var pendingAction: (() -> Unit)? = null
     private var restored = false
 
+    // Интернет-радио: список адресов потока (основной + резервные) и текущий индекс.
+    private var streamUrls: List<String> = emptyList()
+    private var streamIndex = 0
+    private var streamTitle = ""
+
+    /** Сообщения о переключении/недоступности радиопотока (показывает UI). */
+    var onStreamMessage: ((String) -> Unit)? = null
+
     // Статистика прослушивания
     private var statId: Long? = null
     private var statStart = 0L
@@ -82,6 +91,7 @@ class PlayerController(
             c.addListener(object : Player.Listener {
                 override fun onEvents(player: Player, events: Player.Events) { refresh() }
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) { onTrackChanged() }
+                override fun onPlayerError(error: PlaybackException) { onStreamError(error) }
                 override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                     if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) onEndOfTrackPause()
                 }
@@ -214,6 +224,36 @@ class PlayerController(
         c.setMediaItem(item)
         c.prepare()
         c.play()
+    }
+
+    /**
+     * Играет радиопоток. Если [urls][0] не отвечает (ошибка сети/HTTP/таймаут),
+     * автоматически пробуются следующие адреса списка.
+     */
+    fun playStream(urls: List<String>, title: String) {
+        val list = urls.filter { it.isNotBlank() }.distinct()
+        if (list.isEmpty()) return
+        streamUrls = list
+        streamIndex = 0
+        streamTitle = title
+        playUri(Uri.parse(list[0]), title)
+    }
+
+    private fun onStreamError(error: PlaybackException) {
+        val c = controller ?: return
+        val urls = streamUrls
+        if (urls.isEmpty()) return
+        // Реагируем только если сломался именно текущий радиопоток, а не обычный трек.
+        if (c.currentMediaItem?.mediaId != "ext:${urls[streamIndex]}") return
+        val next = streamIndex + 1
+        if (next < urls.size) {
+            streamIndex = next
+            onStreamMessage?.invoke("Поток недоступен, пробую резервный…")
+            playUri(Uri.parse(urls[next]), streamTitle)
+        } else {
+            streamUrls = emptyList()
+            onStreamMessage?.invoke("Станция недоступна. Попробуйте позже.")
+        }
     }
 
     fun playNext(tracks: List<Track>) {

@@ -100,6 +100,9 @@ dependencies {
 
     implementation("io.coil-kt:coil-compose:2.7.0")
 
+    // Кодирование в MP3 (FFmpeg + LAME, LGPL-3.0, форк FFmpegKit с поддержкой 16 КБ страниц)
+    implementation("io.github.maxrave-dev:ffmpeg-kit-audio:6.0.1")
+
     // Чтение и запись тегов аудиофайлов
     implementation("net.jthink:jaudiotagger:3.0.1")
 

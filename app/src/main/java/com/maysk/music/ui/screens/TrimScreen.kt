@@ -75,7 +75,7 @@ fun TrimScreen(initialTrackId: Long = -1L) {
         )
     }
     var showSaveDialog by remember { mutableStateOf(false) }
-    var outFormat by remember { mutableStateOf("m4a") }
+    var outFormat by remember { mutableStateOf("mp3") }
 
     // Текущий трек из плеера или initialTrackId
     LaunchedEffect(lib.tracks, initialTrackId, playerState.currentId) {

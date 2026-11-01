@@ -268,7 +268,6 @@ object FileOps {
         customName: String? = null,
         format: String = "m4a",
     ): OpResult {
-        // В Android нет встроенного MP3-энкодера: при format == "mp3" файл всё равно сохраняется как AAC (.m4a).
         trimRangeError(startMs, endMs, t.durationMs)?.let { return OpResult(it) }
         return try {
             val tmpIn = copyToCache(context, t, "trim-in") ?: return OpResult("Не удалось прочитать файл")
@@ -276,9 +275,13 @@ object FileOps {
                 customName?.takeIf { it.isNotBlank() } ?: t.title.take(40).ifBlank { t.fileName.substringBeforeLast('.') },
                 fallback = "Обрезка",
             )
-            val displayName = if (asCopy) "$base (обрезка).m4a" else "$base.m4a"
+            val mp3 = format == "mp3"
+            val ext = if (mp3) "mp3" else "m4a"
+            val displayName = if (asCopy) "$base (обрезка).$ext" else "$base.$ext"
             try {
-                saveProcessed(context, "trim-out", displayName) { out -> cutAudioFile(tmpIn, out, startMs, endMs) }
+                saveProcessed(context, "trim-out", displayName, ext, if (mp3) "audio/mpeg" else "audio/mp4") { out ->
+                    if (mp3) encodeMp3(tmpIn, out, startMs, endMs) else cutAudioFile(tmpIn, out, startMs, endMs)
+                }
             } finally {
                 tmpIn.delete()
             }
@@ -295,12 +298,14 @@ object FileOps {
         context: Context,
         prefix: String,
         displayName: String,
+        ext: String = "m4a",
+        mime: String = "audio/mp4",
         produce: (File) -> String?,
     ): OpResult {
-        val out = File(context.cacheDir, "$prefix-${System.currentTimeMillis()}.m4a")
+        val out = File(context.cacheDir, "$prefix-${System.currentTimeMillis()}.$ext")
         return try {
             val err = produce(out)
-            if (err != null) OpResult(err) else saveAudioToMusic(context, out, displayName, "audio/mp4")
+            if (err != null) OpResult(err) else saveAudioToMusic(context, out, displayName, mime)
         } finally {
             out.delete()
         }
@@ -313,6 +318,7 @@ object FileOps {
         context: Context,
         videoUri: android.net.Uri,
         displayName: String?,
+        format: String = "m4a",
     ): OpResult {
         return try {
             val tmpIn = File(context.cacheDir, "vid-in-${System.currentTimeMillis()}")
@@ -325,7 +331,11 @@ object FileOps {
                     fallback = "Из видео ${System.currentTimeMillis()}",
                     maxLength = 50,
                 )
-                saveProcessed(context, "vid-out", "$base.m4a") { out -> extractAudioTrack(tmpIn, out) }
+                if (format == "mp3") {
+                    saveProcessed(context, "vid-out", "$base.mp3", "mp3", "audio/mpeg") { out -> encodeMp3(tmpIn, out) }
+                } else {
+                    saveProcessed(context, "vid-out", "$base.m4a") { out -> extractAudioTrack(tmpIn, out) }
+                }
             } finally {
                 tmpIn.delete()
             }
@@ -368,6 +378,30 @@ object FileOps {
         }
     }
 
+
+    /**
+     * Кодирует аудио (или аудиодорожку видео) в MP3 через FFmpegKit (libmp3lame), 192 кбит/с.
+     * Если заданы [startMs] и [endMs] — вырезает этот фрагмент. Возвращает текст ошибки или null.
+     */
+    private fun encodeMp3(input: File, output: File, startMs: Long? = null, endMs: Long? = null): String? {
+        val args = mutableListOf("-y")
+        if (startMs != null && endMs != null) {
+            args += listOf("-ss", String.format(java.util.Locale.US, "%.3f", startMs / 1000.0))
+            args += listOf("-t", String.format(java.util.Locale.US, "%.3f", (endMs - startMs) / 1000.0))
+        }
+        args += listOf(
+            "-i", input.absolutePath,
+            "-vn", "-c:a", "libmp3lame", "-b:a", "192k", "-ar", "44100", "-ac", "2",
+            output.absolutePath,
+        )
+        return try {
+            val session = com.arthenica.ffmpegkit.FFmpegKit.executeWithArguments(args.toTypedArray())
+            if (com.arthenica.ffmpegkit.ReturnCode.isSuccess(session.returnCode)) null
+            else "Не удалось закодировать MP3 (код ${session.returnCode?.value})"
+        } catch (e: Throwable) {
+            "Ошибка MP3-кодера: ${e.message ?: e.javaClass.simpleName}"
+        }
+    }
 
     /** Обрезка: remux AAC/M4A или перекодирование в AAC (для MP3 и др.). */
     private fun cutAudioFile(input: File, output: File, startMs: Long, endMs: Long): String? {
