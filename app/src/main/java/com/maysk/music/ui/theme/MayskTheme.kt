@@ -17,6 +17,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maysk.music.data.AppSettings
+import com.maysk.music.ui.LocalStrings
+import com.maysk.music.ui.stringsFor
 import com.maysk.music.data.BackgroundStyle
 import com.maysk.music.data.ThemePreset
 
@@ -128,6 +130,7 @@ fun MayskTheme(settings: AppSettings, colors: MayskColors, content: @Composable 
     CompositionLocalProvider(
         LocalMaysk provides colors,
         LocalUi provides settings,
+        LocalStrings provides stringsFor(settings.language),
         LocalDensity provides Density(density.density, density.fontScale * extraScale),
     ) {
         MaterialTheme(colorScheme = scheme, typography = typography, content = content)

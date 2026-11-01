@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import com.maysk.music.data.FileOps
 import com.maysk.music.data.Track
 import com.maysk.music.ui.LocalActions
+import com.maysk.music.ui.LocalStrings
 import com.maysk.music.ui.MixKind
 import com.maysk.music.ui.Route
 import com.maysk.music.ui.components.Artwork
@@ -75,7 +76,7 @@ import com.maysk.music.ui.theme.LocalUi
 import java.util.Calendar
 
 @Composable
-fun coverDp(): Dp = when (LocalUi.current.coverSize) { 0 -> 112.dp; 2 -> 160.dp; else -> 136.dp }
+fun coverDp(): Dp = when (LocalUi.current.coverSize) { 0 -> 96.dp; 2 -> 140.dp; else -> 112.dp }
 
 /** Читаемое название: убираем «мусор» вроде 2_5321158… от Telegram. */
 fun Track.displayTitle(): String {
@@ -117,6 +118,7 @@ fun HomeScreen() {
     val history by a.container.userData.history.collectAsState()
     val playlists by a.container.userData.playlists.collectAsState()
     val simple = LocalUi.current.simpleMode
+    val str = LocalStrings.current
 
     val recentPlayed = remember(lib, history) { mixTracks(MixKind.HISTORY, lib, favorites, history).take(20) }
     val recentAdded = remember(lib) { lib.tracks.sortedByDescending { it.dateAdded }.take(20) }
@@ -188,29 +190,29 @@ fun HomeScreen() {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     item {
-                        QuickChip("Любимое", Icons.Rounded.Favorite, c.accent3) {
+                        QuickChip(str.favorites, Icons.Rounded.Favorite, c.accent3) {
                             a.nav.push(Route.MixR(MixKind.FAVORITES))
                         }
                     }
                     item {
-                        QuickChip("Новые", Icons.Rounded.NewReleases, Color(0xFF14B8A6)) {
+                        QuickChip(str.newTracks, Icons.Rounded.NewReleases, Color(0xFF14B8A6)) {
                             a.nav.push(Route.MixR(MixKind.RECENT_ADDED))
                         }
                     }
                     if (untagged.isNotEmpty()) {
                         item {
-                            QuickChip("Без тегов", Icons.Rounded.LabelOff, Color(0xFFF97316)) {
+                            QuickChip(str.untagged, Icons.Rounded.LabelOff, Color(0xFFF97316)) {
                                 a.play(untagged)
                             }
                         }
                     }
                     item {
-                        QuickChip("Плейлисты", Icons.Rounded.QueueMusic, c.accent2) {
+                        QuickChip(str.playlists, Icons.Rounded.QueueMusic, c.accent2) {
                             a.nav.selectTab(2)
                         }
                     }
                     item {
-                        QuickChip("Радио", Icons.Rounded.Radio, Color(0xFF8B5CF6)) {
+                        QuickChip(str.radio, Icons.Rounded.Radio, Color(0xFF8B5CF6)) {
                             a.nav.selectTab(3)
                         }
                     }
@@ -218,11 +220,11 @@ fun HomeScreen() {
             }
 
             if (recentPlayed.isNotEmpty()) {
-                item { SectionHeader("Недавно слушали", "Все") { a.nav.push(Route.MixR(MixKind.HISTORY)) } }
+                item { SectionHeader(str.recentlyPlayed, str.all) { a.nav.push(Route.MixR(MixKind.HISTORY)) } }
                 item { TrackCarousel(recentPlayed) }
             }
 
-            item { SectionHeader("Плейлисты", "Все") { a.nav.selectTab(2) } }
+            item { SectionHeader(str.playlists, str.all) { a.nav.selectTab(2) } }
             item {
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 12.dp),
@@ -242,12 +244,12 @@ fun HomeScreen() {
             }
 
             if (recentAdded.isNotEmpty()) {
-                item { SectionHeader("Недавно добавленные", "Все") { a.nav.push(Route.MixR(MixKind.RECENT_ADDED)) } }
+                item { SectionHeader(str.recentlyAdded, str.all) { a.nav.push(Route.MixR(MixKind.RECENT_ADDED)) } }
                 item { TrackCarousel(recentAdded) }
             }
 
             if (untagged.isNotEmpty() && !simple) {
-                item { SectionHeader("Без тегов", "${untagged.size}") { a.play(untagged) } }
+                item { SectionHeader(str.untagged, "${untagged.size}") { a.play(untagged) } }
                 item { TrackCarousel(untagged) }
             }
 
@@ -266,7 +268,7 @@ fun HomeScreen() {
             }
 
             if (topAlbums.isNotEmpty()) {
-                item { SectionHeader("Альбомы", "Все") { a.nav.push(Route.LibraryTab(1)) } }
+                item { SectionHeader(str.albums, str.all) { a.nav.push(Route.LibraryTab(1)) } }
                 item {
                     val size = coverDp()
                     LazyRow(
@@ -299,7 +301,7 @@ fun HomeScreen() {
             }
 
             if (lib.folders.isNotEmpty()) {
-                item { SectionHeader("Папки", "Все") { a.nav.push(Route.Folders) } }
+                item { SectionHeader(str.folders, str.all) { a.nav.push(Route.Folders) } }
                 item {
                     val names by a.container.userData.folderNames.collectAsState()
                     LazyRow(
@@ -315,7 +317,7 @@ fun HomeScreen() {
                 }
             }
 
-            item { SectionHeader("Статистика", "Подробнее") { a.nav.push(Route.Stats) } }
+            item { SectionHeader(str.stats, str.all) { a.nav.push(Route.Stats) } }
             item {
                 GlassCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp), onClick = { a.nav.push(Route.Stats) }) {
                     Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -374,7 +376,7 @@ private fun QuickChip(label: String, icon: androidx.compose.ui.graphics.vector.I
 @Composable
 private fun HeroCard(title: String, subtitle: String, onPlay: () -> Unit) {
     val c = LocalMaysk.current
-    GlassCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(176.dp), onClick = onPlay) {
+    GlassCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(148.dp), onClick = onPlay) {
         Box(
             Modifier.matchParentSize().drawBehind {
                 drawRect(Brush.verticalGradient(listOf(c.accent2.copy(alpha = 0.55f), c.accent.copy(alpha = 0.45f), c.accent3.copy(alpha = 0.35f))))

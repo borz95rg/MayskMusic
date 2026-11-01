@@ -28,6 +28,7 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -46,7 +47,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.maysk.music.AppContainer
 import com.maysk.music.BuildConfig
+import com.maysk.music.data.AppLang
 import com.maysk.music.data.Track
+import com.maysk.music.ui.LocalStrings
 import com.maysk.music.ui.LocalActions
 import com.maysk.music.ui.Route
 import com.maysk.music.ui.components.GlassCard
@@ -81,6 +84,24 @@ fun SettingsScreen() {
     Column(Modifier.fillMaxSize()) {
         TopBar("Настройки", onBack = { a.nav.pop() })
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
+            val str = LocalStrings.current
+            Group(str.language) {
+                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    listOf(
+                        AppLang.RU to str.languageRu,
+                        AppLang.KK to str.languageKk,
+                        AppLang.EN to str.languageEn,
+                    ).forEach { (lang, label) ->
+                        val selected = settings.language == lang
+                        androidx.compose.material3.FilterChip(
+                            selected = selected,
+                            onClick = { a.container.settings.update { it.copy(language = lang) } },
+                            label = { Text(label) },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                }
+            }
             Group("Библиотека") {
                 Item(Icons.Rounded.FolderOpen, "Музыкальные папки", "Выбор и исключение папок") { a.nav.push(Route.FolderManager) }
                 Item(Icons.Rounded.Refresh, "Обновить библиотеку", "Пересканировать музыку на устройстве") {

@@ -270,6 +270,12 @@ fun PlayerScreen(onClose: () -> Unit) {
                     BottomAction(Icons.Rounded.MoreHoriz, "Ещё") { moreMenu = true }
                     DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
                         if (track != null) {
+                            DropdownMenuItem(text = { Text(LocalStrings.current.trim) }, onClick = {
+                                moreMenu = false; onClose(); a.nav.push(Route.Trim)
+                            })
+                            DropdownMenuItem(text = { Text(LocalStrings.current.editTags) }, onClick = {
+                                moreMenu = false; a.editTags(listOf(track))
+                            })
                             DropdownMenuItem(text = { Text("Добавить в плейлист") }, onClick = { moreMenu = false; a.addToPlaylist(listOf(track)) })
                             DropdownMenuItem(text = { Text("Информация о файле") }, onClick = { moreMenu = false; showDetails = true })
                         }

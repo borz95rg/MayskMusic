@@ -1,0 +1,89 @@
+package com.maysk.music.ui
+
+import androidx.compose.runtime.staticCompositionLocalOf
+import com.maysk.music.data.AppLang
+
+data class Strings(
+    val home: String,
+    val tracks: String,
+    val playlists: String,
+    val radio: String,
+    val myMusic: String,
+    val search: String,
+    val settings: String,
+    val favorites: String,
+    val newTracks: String,
+    val untagged: String,
+    val recentlyPlayed: String,
+    val recentlyAdded: String,
+    val folders: String,
+    val albums: String,
+    val stats: String,
+    val all: String,
+    val language: String,
+    val languageRu: String,
+    val languageKk: String,
+    val languageEn: String,
+    val trim: String,
+    val editTags: String,
+    val saveCopy: String,
+    val checkingStations: String,
+    val workingStations: String,
+    val noWorkingStations: String,
+    val refreshStations: String,
+    val radioRegionsHint: String,
+    val playFromFragment: String,
+    val musicNotFound: String,
+    val rescanLibrary: String,
+    val addedTrack: String,
+    val addedTracks: String,
+    val chechen: String,
+    val ingush: String,
+    val kazakh: String,
+    val russian: String,
+    val stationsCount: String,
+)
+
+fun stringsFor(lang: AppLang): Strings = when (lang) {
+    AppLang.RU -> Strings(
+        home = "Главная", tracks = "Треки", playlists = "Плейлисты", radio = "Радио", myMusic = "Моя музыка",
+        search = "Поиск", settings = "Настройки", favorites = "Любимое", newTracks = "Новые", untagged = "Без тегов",
+        recentlyPlayed = "Недавно слушали", recentlyAdded = "Недавно добавленные", folders = "Папки", albums = "Альбомы",
+        stats = "Статистика", all = "Все", language = "Язык", languageRu = "Русский", languageKk = "Қазақша", languageEn = "English",
+        trim = "Обрезать", editTags = "Редактировать теги", saveCopy = "Сохранить копию",
+        checkingStations = "Проверка станций…", workingStations = "Рабочие станции", noWorkingStations = "Рабочих станций не найдено. Обновите список.",
+        refreshStations = "Обновить станции", radioRegionsHint = "Выберите регион",
+        playFromFragment = "Прослушать с начала фрагмента", musicNotFound = "Музыка не найдена", rescanLibrary = "Обновить библиотеку",
+        addedTrack = "Добавлен 1 новый трек", addedTracks = "Добавлено треков",
+        chechen = "Чеченские", ingush = "Ингушские", kazakh = "Қазақша / Казахские", russian = "Российские",
+        stationsCount = "станций",
+    )
+    AppLang.KK -> Strings(
+        home = "Басты", tracks = "Тректер", playlists = "Плейлисттер", radio = "Радио", myMusic = "Менің музыкам",
+        search = "Іздеу", settings = "Баптаулар", favorites = "Таңдаулы", newTracks = "Жаңа", untagged = "Тегсіз",
+        recentlyPlayed = "Жақында тыңдалған", recentlyAdded = "Жақында қосылған", folders = "Қалталар", albums = "Альбомдар",
+        stats = "Статистика", all = "Барлығы", language = "Тіл", languageRu = "Орысша", languageKk = "Қазақша", languageEn = "English",
+        trim = "Қию", editTags = "Тегтерді өзгерту", saveCopy = "Көшірмені сақтау",
+        checkingStations = "Станцияларды тексеру…", workingStations = "Жұмыс істейтін станциялар", noWorkingStations = "Жұмыс істейтін станция табылмады. Тізімді жаңартыңыз.",
+        refreshStations = "Станцияларды жаңарту", radioRegionsHint = "Аймақты таңдаңыз",
+        playFromFragment = "Үзіндінің басынан тыңдау", musicNotFound = "Музыка табылмады", rescanLibrary = "Кітапхананы жаңарту",
+        addedTrack = "1 жаңа трек қосылды", addedTracks = "Қосылған тректер",
+        chechen = "Шешен", ingush = "Ингуш", kazakh = "Қазақ", russian = "Ресей",
+        stationsCount = "станция",
+    )
+    AppLang.EN -> Strings(
+        home = "Home", tracks = "Tracks", playlists = "Playlists", radio = "Radio", myMusic = "My music",
+        search = "Search", settings = "Settings", favorites = "Favorites", newTracks = "New", untagged = "Untagged",
+        recentlyPlayed = "Recently played", recentlyAdded = "Recently added", folders = "Folders", albums = "Albums",
+        stats = "Stats", all = "All", language = "Language", languageRu = "Russian", languageKk = "Kazakh", languageEn = "English",
+        trim = "Trim", editTags = "Edit tags", saveCopy = "Save copy",
+        checkingStations = "Checking stations…", workingStations = "Working stations", noWorkingStations = "No working stations. Pull to refresh.",
+        refreshStations = "Refresh stations", radioRegionsHint = "Choose a region",
+        playFromFragment = "Preview from start", musicNotFound = "No music found", rescanLibrary = "Rescan library",
+        addedTrack = "1 new track added", addedTracks = "Tracks added",
+        chechen = "Chechen", ingush = "Ingush", kazakh = "Kazakh", russian = "Russian",
+        stationsCount = "stations",
+    )
+}
+
+val LocalStrings = staticCompositionLocalOf { stringsFor(AppLang.RU) }

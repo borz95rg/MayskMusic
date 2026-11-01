@@ -414,12 +414,13 @@ private fun RouteContent(route: Route) {
 @Composable
 private fun BottomNav(nav: Nav) {
     val c = LocalMaysk.current
+    val s = LocalStrings.current
     val items = listOf(
-        Triple("Главная", Icons.Rounded.Home, 0),
-        Triple("Треки", Icons.Rounded.MusicNote, 1),
-        Triple("Плейлисты", Icons.Rounded.QueueMusic, 2),
-        Triple("Радио", Icons.Rounded.Radio, 3),
-        Triple("Моя музыка", Icons.Rounded.Person, 4),
+        Triple(s.home, Icons.Rounded.Home, 0),
+        Triple(s.tracks, Icons.Rounded.MusicNote, 1),
+        Triple(s.playlists, Icons.Rounded.QueueMusic, 2),
+        Triple(s.radio, Icons.Rounded.Radio, 3),
+        Triple(s.myMusic, Icons.Rounded.Person, 4),
     )
     Row(
         Modifier

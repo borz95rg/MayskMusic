@@ -7,6 +7,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 
+enum class AppLang(val title: String) {
+    RU("Русский"),
+    KK("Қазақша"),
+    EN("English"),
+}
+
 enum class ThemePreset(val title: String, val subtitle: String) {
     AURORA("Aurora Glass", "Мягкие градиенты и стекло"),
     AMOLED("AMOLED Ultra", "Чёрный фон, минимализм"),
@@ -49,6 +55,7 @@ data class AppSettings(
     val crossfadeSec: Int = 0,
     /** Баланс: -1 = только левый, 0 = центр, 1 = только правый. */
     val balance: Float = 0f,
+    val language: AppLang = AppLang.RU,
 ) {
     val animationsEnabled: Boolean get() = animSpeed > 0f
 }
@@ -138,6 +145,7 @@ class SettingsStore(context: Context) {
             put("customUpdateRepo", s.customUpdateRepo)
             put("crossfadeSec", s.crossfadeSec)
             put("balance", s.balance.toDouble())
+            put("language", s.language.name)
         }
 
         fun fromJson(o: JSONObject): AppSettings {
@@ -168,6 +176,7 @@ class SettingsStore(context: Context) {
                 customUpdateRepo = o.optString("customUpdateRepo", d.customUpdateRepo),
                 crossfadeSec = o.optInt("crossfadeSec", d.crossfadeSec),
                 balance = o.optDouble("balance", d.balance.toDouble()).toFloat(),
+                language = enumOr(o.optString("language"), d.language),
             )
         }
 
