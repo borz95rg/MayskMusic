@@ -183,64 +183,9 @@ fun HomeScreen() {
                 }
             }
 
-            // Быстрые чипы
-            item {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    item {
-                        QuickChip(str.favorites, Icons.Rounded.Favorite, c.accent3) {
-                            a.nav.push(Route.MixR(MixKind.FAVORITES))
-                        }
-                    }
-                    item {
-                        QuickChip(str.newTracks, Icons.Rounded.NewReleases, Color(0xFF14B8A6)) {
-                            a.nav.push(Route.MixR(MixKind.RECENT_ADDED))
-                        }
-                    }
-                    if (untagged.isNotEmpty()) {
-                        item {
-                            QuickChip(str.untagged, Icons.Rounded.LabelOff, Color(0xFFF97316)) {
-                                a.play(untagged)
-                            }
-                        }
-                    }
-                    item {
-                        QuickChip(str.playlists, Icons.Rounded.QueueMusic, c.accent2) {
-                            a.nav.selectTab(2)
-                        }
-                    }
-                    item {
-                        QuickChip(str.radio, Icons.Rounded.Radio, Color(0xFF8B5CF6)) {
-                            a.nav.selectTab(3)
-                        }
-                    }
-                }
-            }
-
-            if (recentPlayed.isNotEmpty()) {
+                        if (recentPlayed.isNotEmpty()) {
                 item { SectionHeader(str.recentlyPlayed, str.all) { a.nav.push(Route.MixR(MixKind.HISTORY)) } }
                 item { TrackCarousel(recentPlayed) }
-            }
-
-            item { SectionHeader(str.playlists, str.all) { a.nav.selectTab(2) } }
-            item {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    item {
-                        PlaylistChip("Любимое", "${favTracks.size}", Icons.Rounded.Favorite, c.accent3) {
-                            a.nav.push(Route.MixR(MixKind.FAVORITES))
-                        }
-                    }
-                    items(playlists, key = { it.id }) { p ->
-                        PlaylistChip(p.name, "${p.trackIds.size}", Icons.Rounded.QueueMusic, c.accent2) {
-                            a.nav.push(Route.PlaylistR(p.id))
-                        }
-                    }
-                }
             }
 
             if (recentAdded.isNotEmpty()) {
@@ -248,132 +193,9 @@ fun HomeScreen() {
                 item { TrackCarousel(recentAdded) }
             }
 
-            if (untagged.isNotEmpty() && !simple) {
-                item { SectionHeader(str.untagged, "${untagged.size}") { a.play(untagged) } }
-                item { TrackCarousel(untagged) }
-            }
 
-            if (!simple && mixes.isNotEmpty()) {
-                item { SectionHeader("Подборки для вас") }
-                item {
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        items(mixes, key = { it.first.name }) { (kind, list) ->
-                            MixCard(kind, list) { a.nav.push(Route.MixR(kind)) }
-                        }
-                    }
-                }
-            }
+}}}
 
-            if (topAlbums.isNotEmpty()) {
-                item { SectionHeader(str.albums, str.all) { a.nav.push(Route.LibraryTab(1)) } }
-                item {
-                    val size = coverDp()
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    ) {
-                        items(topAlbums, key = { it.id }) { al ->
-                            Column(Modifier.width(size).clickable { a.nav.push(Route.AlbumR(al.id)) }) {
-                                Artwork(al.artUri, Modifier.size(size), corner = 16.dp, seed = al.id, iconSize = 40.dp)
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    al.title,
-                                    color = c.text,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
-                                )
-                                Text(
-                                    al.artist.takeIf { it != "Неизвестный исполнитель" } ?: "Разные исполнители",
-                                    color = c.textDim,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (lib.folders.isNotEmpty()) {
-                item { SectionHeader(str.folders, str.all) { a.nav.push(Route.Folders) } }
-                item {
-                    val names by a.container.userData.folderNames.collectAsState()
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        items(lib.folders.sortedByDescending { it.tracks.size }.take(10), key = { it.path }) { f ->
-                            PlaylistChip(names[f.path] ?: f.name, "${f.tracks.size}", Icons.Rounded.Folder, c.accent) {
-                                a.nav.push(Route.FolderR(f.path))
-                            }
-                        }
-                    }
-                }
-            }
-
-            item { SectionHeader(str.stats, str.all) { a.nav.push(Route.Stats) } }
-            item {
-                GlassCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp), onClick = { a.nav.push(Route.Stats) }) {
-                    Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.BarChart, null, tint = c.accent, modifier = Modifier.size(36.dp))
-                        Spacer(Modifier.width(14.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                "За 7 дней: %.1f ч".format(weekMs / 3_600_000.0),
-                                color = c.text,
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            Text(
-                                "В библиотеке ${lib.tracks.size} треков · ${lib.albums.size} альбомов",
-                                color = c.textDim,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
-                }
-            }
-            item {
-                Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.Center) {
-                    IconButton(onClick = { a.container.library.rescan(); a.toast("Сканирование библиотеки…") }) {
-                        Icon(Icons.Rounded.Refresh, "Обновить библиотеку", tint = c.textDim)
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun greeting(): String = when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
-    in 5..11 -> "Доброе утро"
-    in 12..17 -> "Добрый день"
-    in 18..22 -> "Добрый вечер"
-    else -> "Доброй ночи"
-}
-
-@Composable
-private fun QuickChip(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, onClick: () -> Unit) {
-    val c = LocalMaysk.current
-    Row(
-        Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(tint.copy(alpha = 0.18f))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(label, color = c.text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
 private fun HeroCard(title: String, subtitle: String, onPlay: () -> Unit) {
     val c = LocalMaysk.current
     GlassCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(148.dp), onClick = onPlay) {

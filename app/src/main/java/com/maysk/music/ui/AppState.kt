@@ -36,7 +36,7 @@ sealed interface Route {
     data object Ai : Route
     data class Similar(val trackId: Long) : Route
     data class Mood(val kind: com.maysk.music.data.MoodKind) : Route
-    data object Trim : Route
+    data class Trim(val trackId: Long = -1L) : Route
     data object ExtractAudio : Route
 }
 

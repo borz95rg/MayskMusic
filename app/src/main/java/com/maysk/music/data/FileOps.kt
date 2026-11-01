@@ -341,41 +341,201 @@ object FileOps {
         }
     }
 
-    /** Обрезка через MediaExtractor + MediaMuxer (лучше работает с AAC/M4A/MP4). */
+
+    /** Обрезка: remux AAC/M4A или перекодирование в AAC (для MP3 и др.). */
     private fun cutAudioFile(input: File, output: File, startMs: Long, endMs: Long): String? {
         val extractor = android.media.MediaExtractor()
-        return try {
+        try {
             extractor.setDataSource(input.absolutePath)
-            val track = (0 until extractor.trackCount).firstOrNull { i ->
+            val trackIdx = (0 until extractor.trackCount).firstOrNull { i ->
                 extractor.getTrackFormat(i).getString(android.media.MediaFormat.KEY_MIME)?.startsWith("audio/") == true
             } ?: return "В файле нет аудиодорожки"
-            extractor.selectTrack(track)
-            val format = extractor.getTrackFormat(track)
-            extractor.seekTo(startMs * 1000, android.media.MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+            val format = extractor.getTrackFormat(trackIdx)
+            val mime = format.getString(android.media.MediaFormat.KEY_MIME) ?: ""
+            extractor.selectTrack(trackIdx)
             if (output.exists()) output.delete()
+
+            // AAC в MP4-контейнере можно просто вырезать без перекодирования
+            if (mime.contains("mp4a") || mime == "audio/mp4") {
+                val err = remuxSegment(extractor, format, output, startMs, endMs)
+                if (err == null) return null
+            }
+            extractor.release()
+            return reencodeSegment(input, output, startMs, endMs)
+        } catch (e: Throwable) {
+            return "Обрезка не удалась (${e.message})"
+        } finally {
+            try { extractor.release() } catch (_: Throwable) {}
+        }
+    }
+
+    private fun remuxSegment(
+        extractor: android.media.MediaExtractor,
+        format: android.media.MediaFormat,
+        output: File,
+        startMs: Long,
+        endMs: Long,
+    ): String? {
+        return try {
+            extractor.seekTo(startMs * 1000, android.media.MediaExtractor.SEEK_TO_CLOSEST_SYNC)
             val muxer = android.media.MediaMuxer(output.absolutePath, android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
             val dstTrack = muxer.addTrack(format)
             muxer.start()
-            val buf = java.nio.ByteBuffer.allocate(256 * 1024)
+            val buf = java.nio.ByteBuffer.allocate(512 * 1024)
             val info = android.media.MediaCodec.BufferInfo()
             val endUs = endMs * 1000
+            var firstUs = -1L
             while (true) {
                 info.offset = 0
                 info.size = extractor.readSampleData(buf, 0)
                 if (info.size < 0) break
-                info.presentationTimeUs = extractor.sampleTime
-                if (info.presentationTimeUs > endUs) break
+                val pts = extractor.sampleTime
+                if (pts > endUs) break
+                if (firstUs < 0) firstUs = pts
+                info.presentationTimeUs = (pts - firstUs).coerceAtLeast(0)
                 info.flags = extractor.sampleFlags
                 muxer.writeSampleData(dstTrack, buf, info)
                 extractor.advance()
             }
             muxer.stop()
             muxer.release()
-            if (output.length() < 100) return "Получился пустой файл — формат может не поддерживаться"
-            null
+            if (output.length() < 100) "Пустой файл" else null
         } catch (e: Throwable) {
-            "Обрезка не удалась (${e.message}). Лучше работает с M4A/AAC/MP4."
+            e.message ?: "remux failed"
+        }
+    }
+
+    /** Декод → AAC 128k → M4A. Работает с MP3 и большинством форматов. */
+    private fun reencodeSegment(input: File, output: File, startMs: Long, endMs: Long): String? {
+        val extractor = android.media.MediaExtractor()
+        var decoder: android.media.MediaCodec? = null
+        var encoder: android.media.MediaCodec? = null
+        var muxer: android.media.MediaMuxer? = null
+        return try {
+            extractor.setDataSource(input.absolutePath)
+            val trackIdx = (0 until extractor.trackCount).firstOrNull { i ->
+                extractor.getTrackFormat(i).getString(android.media.MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            } ?: return "Нет аудиодорожки"
+            val inFormat = extractor.getTrackFormat(trackIdx)
+            val inMime = inFormat.getString(android.media.MediaFormat.KEY_MIME) ?: return "Неизвестный формат"
+            extractor.selectTrack(trackIdx)
+            extractor.seekTo(startMs * 1000, android.media.MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+
+            val sampleRate = if (inFormat.containsKey(android.media.MediaFormat.KEY_SAMPLE_RATE))
+                inFormat.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE) else 44100
+            val channelCount = if (inFormat.containsKey(android.media.MediaFormat.KEY_CHANNEL_COUNT))
+                inFormat.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT) else 2
+
+            decoder = android.media.MediaCodec.createDecoderByType(inMime)
+            decoder.configure(inFormat, null, null, 0)
+            decoder.start()
+
+            val outFormat = android.media.MediaFormat.createAudioFormat(
+                android.media.MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, channelCount,
+            ).apply {
+                setInteger(android.media.MediaFormat.KEY_AAC_PROFILE, android.media.MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+                setInteger(android.media.MediaFormat.KEY_BIT_RATE, 128_000)
+                setInteger(android.media.MediaFormat.KEY_MAX_INPUT_SIZE, 16384)
+            }
+            encoder = android.media.MediaCodec.createEncoderByType(android.media.MediaFormat.MIMETYPE_AUDIO_AAC)
+            encoder.configure(outFormat, null, null, android.media.MediaCodec.CONFIGURE_FLAG_ENCODE)
+            encoder.start()
+
+            val endUs = endMs * 1000L
+            var muxerTrack = -1
+            var muxerStarted = false
+            var inputDone = false
+            var outputDone = false
+            val timeoutUs = 10_000L
+            var firstPts = -1L
+
+            while (!outputDone) {
+                if (!inputDone) {
+                    val inIndex = decoder.dequeueInputBuffer(timeoutUs)
+                    if (inIndex >= 0) {
+                        val buf = decoder.getInputBuffer(inIndex)!!
+                        val sampleSize = extractor.readSampleData(buf, 0)
+                        val pts = extractor.sampleTime
+                        if (sampleSize < 0 || pts > endUs) {
+                            decoder.queueInputBuffer(inIndex, 0, 0, 0, android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                            inputDone = true
+                        } else {
+                            decoder.queueInputBuffer(inIndex, 0, sampleSize, pts, 0)
+                            extractor.advance()
+                        }
+                    }
+                }
+
+                // decoder → encoder
+                val decInfo = android.media.MediaCodec.BufferInfo()
+                val outIndex = decoder.dequeueOutputBuffer(decInfo, timeoutUs)
+                if (outIndex >= 0) {
+                    val decBuf = decoder.getOutputBuffer(outIndex)!!
+                    if (decInfo.size > 0 && decInfo.presentationTimeUs <= endUs) {
+                        var remaining = decInfo.size
+                        var offset = decInfo.offset
+                        while (remaining > 0) {
+                            val encIn = encoder.dequeueInputBuffer(timeoutUs)
+                            if (encIn >= 0) {
+                                val encBuf = encoder.getInputBuffer(encIn)!!
+                                val chunk = minOf(remaining, encBuf.capacity())
+                                encBuf.clear()
+                                decBuf.position(offset)
+                                decBuf.limit(offset + chunk)
+                                encBuf.put(decBuf)
+                                val ptsAdj = if (firstPts < 0) {
+                                    firstPts = decInfo.presentationTimeUs
+                                    0L
+                                } else (decInfo.presentationTimeUs - firstPts).coerceAtLeast(0)
+                                encoder.queueInputBuffer(encIn, 0, chunk, ptsAdj, 0)
+                                offset += chunk
+                                remaining -= chunk
+                            } else break
+                        }
+                    }
+                    val eos = decInfo.flags and android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
+                    decoder.releaseOutputBuffer(outIndex, false)
+                    if (eos) {
+                        val encIn = encoder.dequeueInputBuffer(timeoutUs)
+                        if (encIn >= 0) {
+                            encoder.queueInputBuffer(encIn, 0, 0, 0, android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                        }
+                    }
+                }
+
+                val encInfo = android.media.MediaCodec.BufferInfo()
+                val encOut = encoder.dequeueOutputBuffer(encInfo, timeoutUs)
+                when {
+                    encOut == android.media.MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                        if (!muxerStarted) {
+                            muxer = android.media.MediaMuxer(output.absolutePath, android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+                            muxerTrack = muxer!!.addTrack(encoder.outputFormat)
+                            muxer!!.start()
+                            muxerStarted = true
+                        }
+                    }
+                    encOut >= 0 -> {
+                        val encBuf = encoder.getOutputBuffer(encOut)!!
+                        if (encInfo.size > 0 && muxerStarted &&
+                            encInfo.flags and android.media.MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0
+                        ) {
+                            muxer!!.writeSampleData(muxerTrack, encBuf, encInfo)
+                        }
+                        val eos = encInfo.flags and android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
+                        encoder.releaseOutputBuffer(encOut, false)
+                        if (eos) outputDone = true
+                    }
+                }
+            }
+
+            try { muxer?.stop() } catch (_: Throwable) {}
+            muxer?.release()
+            if (output.length() < 100) "Пустой результат перекодирования" else null
+        } catch (e: Throwable) {
+            "Перекодирование: ${e.message}"
         } finally {
+            try { decoder?.stop(); decoder?.release() } catch (_: Throwable) {}
+            try { encoder?.stop(); encoder?.release() } catch (_: Throwable) {}
             try { extractor.release() } catch (_: Throwable) {}
         }
     }

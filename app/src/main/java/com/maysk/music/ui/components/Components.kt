@@ -55,6 +55,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import android.app.WallpaperManager
+import android.graphics.drawable.BitmapDrawable
+import android.net.Uri
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.remember
 import coil.compose.AsyncImage
 import com.maysk.music.data.Track
 import com.maysk.music.data.formatTime
@@ -65,32 +73,67 @@ import com.maysk.music.ui.theme.LocalUi
 @Composable
 fun AppBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
     val c = LocalMaysk.current
-    Box(
-        modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(c.bgTop, c.bgBottom)))
-            .drawBehind {
-                if (c.background == com.maysk.music.data.BackgroundStyle.AURORA && !c.isLight) {
-                    drawCircle(
-                        Brush.radialGradient(listOf(c.accent.copy(alpha = 0.28f), Color.Transparent),
-                            center = Offset(size.width * 0.15f, size.height * 0.1f), radius = size.width * 0.8f),
-                        radius = size.width * 0.8f, center = Offset(size.width * 0.15f, size.height * 0.1f),
-                    )
-                    drawCircle(
-                        Brush.radialGradient(listOf(c.accent3.copy(alpha = 0.18f), Color.Transparent),
-                            center = Offset(size.width * 0.95f, size.height * 0.45f), radius = size.width * 0.7f),
-                        radius = size.width * 0.7f, center = Offset(size.width * 0.95f, size.height * 0.45f),
-                    )
-                } else if (c.background == com.maysk.music.data.BackgroundStyle.GRADIENT && !c.isLight) {
-                    drawCircle(
-                        Brush.radialGradient(listOf(c.accent.copy(alpha = 0.16f), Color.Transparent),
-                            center = Offset(size.width * 0.5f, 0f), radius = size.width),
-                        radius = size.width, center = Offset(size.width * 0.5f, 0f),
-                    )
-                }
-            },
-        content = content,
-    )
+    val ui = LocalUi.current
+    val ctx = LocalContext.current
+    Box(modifier.fillMaxSize()) {
+        // Базовый градиент темы
+        Box(
+            Modifier
+                .matchParentSize()
+                .background(Brush.verticalGradient(listOf(c.bgTop, c.bgBottom)))
+                .drawBehind {
+                    if (c.background == com.maysk.music.data.BackgroundStyle.AURORA && !c.isLight) {
+                        drawCircle(
+                            Brush.radialGradient(listOf(c.accent.copy(alpha = 0.28f), Color.Transparent),
+                                center = Offset(size.width * 0.15f, size.height * 0.1f), radius = size.width * 0.8f),
+                            radius = size.width * 0.8f, center = Offset(size.width * 0.15f, size.height * 0.1f),
+                        )
+                        drawCircle(
+                            Brush.radialGradient(listOf(c.accent3.copy(alpha = 0.18f), Color.Transparent),
+                                center = Offset(size.width * 0.95f, size.height * 0.45f), radius = size.width * 0.7f),
+                            radius = size.width * 0.7f, center = Offset(size.width * 0.95f, size.height * 0.45f),
+                        )
+                    } else if (c.background == com.maysk.music.data.BackgroundStyle.GRADIENT && !c.isLight) {
+                        drawCircle(
+                            Brush.radialGradient(listOf(c.accent.copy(alpha = 0.16f), Color.Transparent),
+                                center = Offset(size.width * 0.5f, 0f), radius = size.width),
+                            radius = size.width, center = Offset(size.width * 0.5f, 0f),
+                        )
+                    }
+                },
+        )
+        // Обои телефона
+        if (c.background == com.maysk.music.data.BackgroundStyle.WALLPAPER) {
+            val bmp = remember {
+                try {
+                    val d = WallpaperManager.getInstance(ctx).drawable
+                    (d as? BitmapDrawable)?.bitmap
+                } catch (_: Exception) { null }
+            }
+            if (bmp != null) {
+                Image(
+                    bitmap = bmp.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.matchParentSize(),
+                    contentScale = ContentScale.Crop,
+                    alpha = 0.55f,
+                )
+                Box(Modifier.matchParentSize().background(c.bgBottom.copy(alpha = 0.45f)))
+            }
+        }
+        // Фото из галереи
+        if (c.background == com.maysk.music.data.BackgroundStyle.IMAGE && ui.customBgUri.isNotBlank()) {
+            AsyncImage(
+                model = Uri.parse(ui.customBgUri),
+                contentDescription = null,
+                modifier = Modifier.matchParentSize(),
+                contentScale = ContentScale.Crop,
+                alpha = 0.55f,
+            )
+            Box(Modifier.matchParentSize().background(c.bgBottom.copy(alpha = 0.45f)))
+        }
+        Box(Modifier.fillMaxSize(), content = content)
+    }
 }
 
 /** Стеклянная карточка. */

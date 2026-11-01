@@ -74,6 +74,24 @@ fun buildColors(s: AppSettings, dynamicAccent: Color?, systemDark: Boolean): May
             accent, blue, pink, button, Color.White, Color(0xFFB3B3B3), false, s.corner.dp, BackgroundStyle.SOLID, s.highContrast)
         ThemePreset.LIGHT -> MayskColors(true, Color(0xFFF4F1FF), Color(0xFFE9E4FB), Color.White, 0.75f, Color(0x1A000000),
             accent, blue, pink, button, Color(0xFF15122B), Color(0xFF15122B).copy(alpha = 0.6f), false, s.corner.dp, s.background, s.highContrast)
+        ThemePreset.OCEAN -> MayskColors(false, Color(0xFF0A1628), Color(0xFF020B16), Color.White, s.cardAlpha, Color.White.copy(alpha = 0.10f),
+            Color(0xFF38BDF8), Color(0xFF0EA5E9), Color(0xFF22D3EE), button, Color.White, Color.White.copy(alpha = 0.65f), s.glow, s.corner.dp, s.background, s.highContrast)
+        ThemePreset.FOREST -> MayskColors(false, Color(0xFF0C1A12), Color(0xFF040A07), Color.White, s.cardAlpha, Color.White.copy(alpha = 0.10f),
+            Color(0xFF22C55E), Color(0xFF16A34A), Color(0xFF84CC16), button, Color.White, Color.White.copy(alpha = 0.65f), s.glow, s.corner.dp, s.background, s.highContrast)
+        ThemePreset.SUNSET -> MayskColors(false, Color(0xFF1A0B10), Color(0xFF0C0408), Color.White, s.cardAlpha, Color.White.copy(alpha = 0.10f),
+            Color(0xFFF97316), Color(0xFFEF4444), Color(0xFFFBBF24), button, Color.White, Color.White.copy(alpha = 0.65f), s.glow, s.corner.dp, s.background, s.highContrast)
+        ThemePreset.ROSE -> MayskColors(false, Color(0xFF1A0A14), Color(0xFF0C050A), Color.White, s.cardAlpha, Color.White.copy(alpha = 0.10f),
+            Color(0xFFF472B6), Color(0xFFEC4899), Color(0xFFFB7185), button, Color.White, Color.White.copy(alpha = 0.65f), s.glow, s.corner.dp, s.background, s.highContrast)
+        ThemePreset.CYBER -> MayskColors(false, Color(0xFF0A0018), Color(0xFF020008), Color(0xFF00F0FF), s.cardAlpha + 0.04f, Color(0xFF00F0FF).copy(alpha = 0.25f),
+            Color(0xFF00F0FF), Color(0xFFFF00E5), Color(0xFF7CFF00), button, Color.White, Color.White.copy(alpha = 0.7f), true, s.corner.dp, s.background, s.highContrast)
+        ThemePreset.SAND -> MayskColors(true, Color(0xFFF7F0E4), Color(0xFFEDE3D0), Color.White, 0.8f, Color(0x1A000000),
+            Color(0xFFD97706), Color(0xFFB45309), Color(0xFFCA8A04), button, Color(0xFF292018), Color(0xFF292018).copy(alpha = 0.6f), false, s.corner.dp, s.background, s.highContrast)
+        ThemePreset.MIDNIGHT -> MayskColors(false, Color(0xFF080818), Color(0xFF02020A), Color.White, s.cardAlpha, Color.White.copy(alpha = 0.08f),
+            Color(0xFF6366F1), Color(0xFF818CF8), Color(0xFFA78BFA), button, Color.White, Color.White.copy(alpha = 0.6f), s.glow, s.corner.dp, s.background, s.highContrast)
+        ThemePreset.EMERALD -> MayskColors(false, Color(0xFF061A14), Color(0xFF020C09), Color.White, s.cardAlpha, Color.White.copy(alpha = 0.10f),
+            Color(0xFF10B981), Color(0xFF34D399), Color(0xFF6EE7B7), button, Color.White, Color.White.copy(alpha = 0.65f), s.glow, s.corner.dp, s.background, s.highContrast)
+        ThemePreset.LAVENDER -> MayskColors(true, Color(0xFFF3EEFF), Color(0xFFE8E0FA), Color.White, 0.8f, Color(0x1A000000),
+            Color(0xFF8B5CF6), Color(0xFFA78BFA), Color(0xFFC4B5FD), button, Color(0xFF1E1533), Color(0xFF1E1533).copy(alpha = 0.6f), false, s.corner.dp, s.background, s.highContrast)
     }
     return if (s.highContrast) base.copy(
         textDim = if (base.isLight) Color(0xFF15122B) else Color.White.copy(alpha = 0.9f),

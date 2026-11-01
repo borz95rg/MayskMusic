@@ -272,7 +272,7 @@ fun PlayerScreen(onClose: () -> Unit) {
                     DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
                         if (track != null) {
                             DropdownMenuItem(text = { Text(LocalStrings.current.trim) }, onClick = {
-                                moreMenu = false; onClose(); a.nav.push(Route.Trim)
+                                moreMenu = false; onClose(); a.nav.push(Route.Trim(track.id))
                             })
                             DropdownMenuItem(text = { Text(LocalStrings.current.editTags) }, onClick = {
                                 moreMenu = false; a.editTags(listOf(track))

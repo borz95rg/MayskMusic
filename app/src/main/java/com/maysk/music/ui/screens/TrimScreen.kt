@@ -25,8 +25,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,19 +53,44 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun TrimScreen() {
+fun TrimScreen(initialTrackId: Long = -1L) {
     val a = LocalActions.current
     val c = LocalMaysk.current
     val ctx = LocalContext.current
     val lib by a.container.library.library.collectAsState()
+    val playerState by a.container.player.state.collectAsState()
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<Track?>(null) }
     var startMs by remember { mutableStateOf(0f) }
     var endMs by remember { mutableStateOf(0f) }
     var busy by remember { mutableStateOf(false) }
 
+    // Текущий трек из плеера или initialTrackId
+    LaunchedEffect(lib.tracks, initialTrackId, playerState.currentId) {
+        if (selected != null) return@LaunchedEffect
+        val id = when {
+            initialTrackId > 0 -> initialTrackId
+            playerState.currentId != null -> playerState.currentId
+            else -> null
+        }
+        if (id != null) {
+            val t = lib.tracks.find { it.id == id }
+            if (t != null) {
+                selected = t
+                startMs = 0f
+                endMs = t.durationMs.toFloat().coerceAtLeast(1000f)
+            }
+        }
+    }
+
     Column(Modifier.fillMaxSize()) {
-        TopBar("Обрезать трек", onBack = { if (selected != null) selected = null else a.nav.pop() })
+        TopBar("Обрезать трек", onBack = {
+            if (selected != null && initialTrackId <= 0 && playerState.currentId == null) {
+                selected = null
+            } else {
+                a.nav.pop()
+            }
+        })
 
         if (lib.tracks.isEmpty()) {
             EmptyState(
@@ -79,7 +104,7 @@ fun TrimScreen() {
         val track = selected
         if (track == null) {
             Text(
-                "Выберите трек · лучше всего работает с M4A / AAC / MP4",
+                "Выберите трек",
                 color = c.textDim,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -98,22 +123,13 @@ fun TrimScreen() {
                                 endMs = t.durationMs.toFloat().coerceAtLeast(1000f)
                             },
                     ) {
-                        Row(
-                            Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Artwork(t.artUri, Modifier.size(48.dp), corner = 10.dp, seed = t.albumId)
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
+                                Text(t.title, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
                                 Text(
-                                    t.title,
-                                    color = c.text,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                )
-                                Text(
-                                    "${t.artist} · ${formatTime(t.durationMs)} · .${t.extension}",
+                                    "${t.artist} · ${formatTime(t.durationMs)}",
                                     color = c.textDim,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
@@ -153,12 +169,11 @@ fun TrimScreen() {
                         activeTrackColor = c.accent,
                         inactiveTrackColor = c.text.copy(alpha = 0.15f),
                     ),
-                    modifier = Modifier.fillMaxWidth(),
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(formatTime(startMs.toLong()), color = c.textDim, style = MaterialTheme.typography.bodySmall)
                     Text(
-                        "Длина: ${formatTime((endMs - startMs).toLong())}",
+                        formatTime((endMs - startMs).toLong()),
                         color = c.text,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
@@ -177,12 +192,12 @@ fun TrimScreen() {
                 ) {
                     Icon(Icons.Rounded.PlayArrow, null, Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Прослушать с начала фрагмента")
+                    Text("Прослушать фрагмент")
                 }
 
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    "По умолчанию сохраняется копия в Music/Maysk/. Оригинал не меняется. Лучше работает с M4A/AAC/MP4; MP3 может не обрезаться.",
+                    "Сохраняется копия (M4A) в Music/Maysk/. Оригинал не меняется.",
                     color = c.textDim,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -206,20 +221,17 @@ fun TrimScreen() {
                                 if (result.error != null) {
                                     a.toast(result.error)
                                 } else {
-                                    a.toast("Сохранено в Music/Maysk/")
-                                    FileOps.rescanFiles(ctx, result.scan)
-                                    a.container.library.rescan(debounceMs = 800)
-                                    selected = null
+                                    a.toast("Сохранено")
+                                    a.container.library.rescan()
+                                    a.nav.pop()
                                 }
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
+                        Icon(Icons.Rounded.ContentCut, null, Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
                         Text("Сохранить копию")
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = { selected = null }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Выбрать другой трек")
                     }
                 }
             }

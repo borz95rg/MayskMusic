@@ -406,7 +406,7 @@ private fun RouteContent(route: Route) {
         Route.Ai -> AiScreen()
         is Route.Similar -> SimilarScreen(route.trackId)
         is Route.Mood -> MoodScreen(route.kind)
-        Route.Trim -> TrimScreen()
+        is Route.Trim -> TrimScreen(initialTrackId = route.trackId)
         Route.ExtractAudio -> ExtractAudioScreen()
     }
 }
