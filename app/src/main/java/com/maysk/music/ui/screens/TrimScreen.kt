@@ -182,7 +182,7 @@ fun TrimScreen() {
 
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    "Результат сохраняется как новый файл в Music/Maysk/. Оригинал не меняется.",
+                    "По умолчанию сохраняется копия в Music/Maysk/. Оригинал не меняется. Лучше работает с M4A/AAC/MP4; MP3 может не обрезаться.",
                     color = c.textDim,
                     style = MaterialTheme.typography.bodySmall,
                 )

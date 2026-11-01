@@ -173,6 +173,20 @@ private fun MainScaffold(container: AppContainer) {
         { msg: String -> scope.launch { snackbar.currentSnackbarData?.dismiss(); snackbar.showSnackbar(msg) }; Unit }
     }
 
+    // Тост при появлении новых треков (скачивание / импорт)
+    val libState by container.library.library.collectAsState()
+    var prevTrackCount by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(libState.tracks.size, libState.loaded) {
+        if (!libState.loaded) return@LaunchedEffect
+        val n = libState.tracks.size
+        val prev = prevTrackCount
+        if (prev != null && n > prev) {
+            val added = n - prev
+            toastRef(if (added == 1) "Добавлен 1 новый трек" else "Добавлено треков: $added")
+        }
+        prevTrackCount = n
+    }
+
     val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
         if (res.resultCode == Activity.RESULT_OK) {
             container.library.rescan(debounceMs = 300)

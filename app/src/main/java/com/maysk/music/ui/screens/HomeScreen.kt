@@ -24,8 +24,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.LabelOff
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Refresh
@@ -56,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.maysk.music.data.FileOps
 import com.maysk.music.data.Track
 import com.maysk.music.ui.LocalActions
 import com.maysk.music.ui.MixKind
@@ -71,7 +74,37 @@ import com.maysk.music.ui.theme.LocalUi
 import java.util.Calendar
 
 @Composable
-fun coverDp(): Dp = when (LocalUi.current.coverSize) { 0 -> 104.dp; 2 -> 156.dp; else -> 128.dp }
+fun coverDp(): Dp = when (LocalUi.current.coverSize) { 0 -> 112.dp; 2 -> 160.dp; else -> 136.dp }
+
+/** Читаемое название: убираем «мусор» вроде 2_5321158… от Telegram. */
+fun Track.displayTitle(): String {
+    val raw = title.trim()
+    if (raw.isEmpty()) return fileName.substringBeforeLast('.').ifBlank { "Без названия" }
+    // Telegram / WhatsApp style numeric prefixes
+    if (Regex("^\\d{1,3}_\\d{8,}").containsMatchIn(raw) ||
+        Regex("^\\d{10,}").matches(raw) ||
+        (artist == "Неизвестный исполнитель" && raw.length > 28 && raw.all { it.isDigit() || it == '_' || it == '-' || it == '.' })
+    ) {
+        FileOps.guessFromFilename(this)?.title?.takeIf { it.isNotBlank() }?.let { return it }
+        val cleaned = fileName.substringBeforeLast('.')
+            .replace('_', ' ')
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        return cleaned.ifBlank { "Без названия" }.take(48)
+    }
+    return raw
+}
+
+fun Track.displayArtist(): String {
+    if (artist.isNotBlank() && artist != "Неизвестный исполнитель") return artist
+    FileOps.guessFromFilename(this)?.artist?.takeIf { it.isNotBlank() }?.let { return it }
+    return "Неизвестный исполнитель"
+}
+
+fun Track.isUntagged(): Boolean =
+    artist == "Неизвестный исполнитель" ||
+        title == fileName.substringBeforeLast('.') ||
+        Regex("^\\d{1,3}_\\d{8,}").containsMatchIn(title)
 
 @Composable
 fun HomeScreen() {
@@ -87,9 +120,13 @@ fun HomeScreen() {
     val recentPlayed = remember(lib, history) { mixTracks(MixKind.HISTORY, lib, favorites, history).take(20) }
     val recentAdded = remember(lib) { lib.tracks.sortedByDescending { it.dateAdded }.take(20) }
     val favTracks = remember(lib, favorites) { lib.tracks.filter { it.id in favorites } }
+    val untagged = remember(lib) { lib.tracks.filter { it.isUntagged() }.take(30) }
     val topAlbums = remember(lib, history) {
         val plays = history.groupBy { lib.byId[it.trackId]?.albumId }.mapValues { e -> e.value.sumOf { it.listenedMs } }
-        lib.albums.sortedByDescending { plays[it.id] ?: 0L }.take(15)
+        lib.albums
+            .filter { it.title.isNotBlank() && it.title != "Без альбома" }
+            .sortedByDescending { plays[it.id] ?: 0L }
+            .take(15)
     }
     val mixes = remember(lib, favorites, history) {
         MixKind.entries.filter { it != MixKind.HISTORY }
@@ -131,14 +168,46 @@ fun HomeScreen() {
             return@Column
         }
 
-        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(contentPadding = PaddingValues(bottom = 28.dp)) {
             item {
                 HeroCard(
                     title = greeting(),
-                    subtitle = if (history.isEmpty()) "Перемешать всю библиотеку · ${lib.tracks.size} треков" else "Подборка из любимого и частого",
+                    subtitle = if (history.isEmpty()) "Перемешать всю библиотеку · ${lib.tracks.size} треков"
+                    else "Подборка из любимого и частого",
                 ) {
                     val road = mixes.firstOrNull { it.first == MixKind.ROAD }?.second
                     if (!road.isNullOrEmpty()) a.shuffle(road) else a.shuffle(lib.tracks)
+                }
+            }
+
+            // Быстрые чипы
+            item {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    item {
+                        QuickChip("Любимое", Icons.Rounded.Favorite, c.accent3) {
+                            a.nav.push(Route.MixR(MixKind.FAVORITES))
+                        }
+                    }
+                    item {
+                        QuickChip("Новые", Icons.Rounded.NewReleases, Color(0xFF14B8A6)) {
+                            a.nav.push(Route.MixR(MixKind.RECENT_ADDED))
+                        }
+                    }
+                    if (untagged.isNotEmpty()) {
+                        item {
+                            QuickChip("Без тегов", Icons.Rounded.LabelOff, Color(0xFFF97316)) {
+                                a.play(untagged)
+                            }
+                        }
+                    }
+                    item {
+                        QuickChip("Плейлисты", Icons.Rounded.QueueMusic, c.accent2) {
+                            a.nav.selectTab(2)
+                        }
+                    }
                 }
             }
 
@@ -149,12 +218,19 @@ fun HomeScreen() {
 
             item { SectionHeader("Плейлисты", "Все") { a.nav.selectTab(2) } }
             item {
-                LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                     item {
-                        PlaylistChip("Любимое", "${favTracks.size}", Icons.Rounded.Favorite, c.accent3) { a.nav.push(Route.MixR(MixKind.FAVORITES)) }
+                        PlaylistChip("Любимое", "${favTracks.size}", Icons.Rounded.Favorite, c.accent3) {
+                            a.nav.push(Route.MixR(MixKind.FAVORITES))
+                        }
                     }
                     items(playlists, key = { it.id }) { p ->
-                        PlaylistChip(p.name, "${p.trackIds.size}", Icons.Rounded.QueueMusic, c.accent2) { a.nav.push(Route.PlaylistR(p.id)) }
+                        PlaylistChip(p.name, "${p.trackIds.size}", Icons.Rounded.QueueMusic, c.accent2) {
+                            a.nav.push(Route.PlaylistR(p.id))
+                        }
                     }
                 }
             }
@@ -164,10 +240,18 @@ fun HomeScreen() {
                 item { TrackCarousel(recentAdded) }
             }
 
+            if (untagged.isNotEmpty() && !simple) {
+                item { SectionHeader("Без тегов", "${untagged.size}") { a.play(untagged) } }
+                item { TrackCarousel(untagged) }
+            }
+
             if (!simple && mixes.isNotEmpty()) {
                 item { SectionHeader("Подборки для вас") }
                 item {
-                    LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
                         items(mixes, key = { it.first.name }) { (kind, list) ->
                             MixCard(kind, list) { a.nav.push(Route.MixR(kind)) }
                         }
@@ -179,13 +263,29 @@ fun HomeScreen() {
                 item { SectionHeader("Альбомы", "Все") { a.nav.push(Route.LibraryTab(1)) } }
                 item {
                     val size = coverDp()
-                    LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
                         items(topAlbums, key = { it.id }) { al ->
                             Column(Modifier.width(size).clickable { a.nav.push(Route.AlbumR(al.id)) }) {
-                                Artwork(al.artUri, Modifier.size(size), corner = 14.dp, seed = al.id, iconSize = 36.dp)
-                                Spacer(Modifier.height(6.dp))
-                                Text(al.title, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
-                                Text(al.artist, color = c.textDim, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                                Artwork(al.artUri, Modifier.size(size), corner = 16.dp, seed = al.id, iconSize = 40.dp)
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    al.title,
+                                    color = c.text,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                Text(
+                                    al.artist.takeIf { it != "Неизвестный исполнитель" } ?: "Разные исполнители",
+                                    color = c.textDim,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
                             }
                         }
                     }
@@ -196,7 +296,10 @@ fun HomeScreen() {
                 item { SectionHeader("Папки", "Все") { a.nav.push(Route.Folders) } }
                 item {
                     val names by a.container.userData.folderNames.collectAsState()
-                    LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
                         items(lib.folders.sortedByDescending { it.tracks.size }.take(10), key = { it.path }) { f ->
                             PlaylistChip(names[f.path] ?: f.name, "${f.tracks.size}", Icons.Rounded.Folder, c.accent) {
                                 a.nav.push(Route.FolderR(f.path))
@@ -209,18 +312,26 @@ fun HomeScreen() {
             item { SectionHeader("Статистика", "Подробнее") { a.nav.push(Route.Stats) } }
             item {
                 GlassCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp), onClick = { a.nav.push(Route.Stats) }) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.BarChart, null, tint = c.accent, modifier = Modifier.size(36.dp))
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("За 7 дней: %.1f ч".format(weekMs / 3_600_000.0), color = c.text, style = MaterialTheme.typography.titleMedium)
-                            Text("В библиотеке ${lib.tracks.size} треков · ${lib.albums.size} альбомов · ${lib.artists.size} исполнителей", color = c.textDim, style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                "За 7 дней: %.1f ч".format(weekMs / 3_600_000.0),
+                                color = c.text,
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                "В библиотеке ${lib.tracks.size} треков · ${lib.albums.size} альбомов",
+                                color = c.textDim,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
                         }
                     }
                 }
             }
             item {
-                Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.Center) {
+                Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.Center) {
                     IconButton(onClick = { a.container.library.rescan(); a.toast("Сканирование библиотеки…") }) {
                         Icon(Icons.Rounded.Refresh, "Обновить библиотеку", tint = c.textDim)
                     }
@@ -238,10 +349,26 @@ private fun greeting(): String = when (Calendar.getInstance().get(Calendar.HOUR_
 }
 
 @Composable
+private fun QuickChip(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, onClick: () -> Unit) {
+    val c = LocalMaysk.current
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(tint.copy(alpha = 0.18f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, color = c.text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
 private fun HeroCard(title: String, subtitle: String, onPlay: () -> Unit) {
     val c = LocalMaysk.current
-    GlassCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(170.dp), onClick = onPlay) {
-        // Нарисованный «горный» пейзаж в фирменных цветах
+    GlassCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(176.dp), onClick = onPlay) {
         Box(
             Modifier.matchParentSize().drawBehind {
                 drawRect(Brush.verticalGradient(listOf(c.accent2.copy(alpha = 0.55f), c.accent.copy(alpha = 0.45f), c.accent3.copy(alpha = 0.35f))))
@@ -267,8 +394,8 @@ private fun HeroCard(title: String, subtitle: String, onPlay: () -> Unit) {
                 drawPath(near, SolidColor(Color(0xFF0B0718).copy(alpha = 0.9f)))
             }
         )
-        Column(Modifier.align(Alignment.BottomStart).padding(16.dp)) {
-            Text(title, color = Color.White, style = MaterialTheme.typography.titleLarge)
+        Column(Modifier.align(Alignment.BottomStart).padding(18.dp)) {
+            Text(title, color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(subtitle, color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodySmall)
         }
         Box(
@@ -284,28 +411,58 @@ fun TrackCarousel(tracks: List<Track>) {
     val a = LocalActions.current
     val c = LocalMaysk.current
     val size = coverDp()
-    LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
         items(tracks.size) { i ->
             val t = tracks[i]
-            Column(Modifier.width(size).clip(RoundedCornerShape(14.dp)).clickable { a.play(tracks, i) }) {
-                Artwork(t.artUri, Modifier.size(size), corner = 14.dp, seed = t.albumId, iconSize = 36.dp)
-                Spacer(Modifier.height(6.dp))
-                Text(t.title, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
-                Text(t.artist, color = c.textDim, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+            Column(
+                Modifier
+                    .width(size)
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable { a.play(tracks, i) },
+            ) {
+                Artwork(t.artUri, Modifier.size(size), corner = 16.dp, seed = t.albumId, iconSize = 40.dp)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    t.displayTitle(),
+                    color = c.text,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    t.displayArtist(),
+                    color = c.textDim,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun PlaylistChip(title: String, count: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, onClick: () -> Unit) {
+private fun PlaylistChip(
+    title: String,
+    count: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: Color,
+    onClick: () -> Unit,
+) {
     val c = LocalMaysk.current
-    GlassCard(Modifier.width(112.dp).aspectRatio(1f), onClick = onClick) {
-        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(tint.copy(alpha = 0.30f), Color.Transparent))))
-        Column(Modifier.align(Alignment.Center).padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, null, tint = tint, modifier = Modifier.size(34.dp))
-            Spacer(Modifier.height(6.dp))
-            Text(title, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
+    GlassCard(Modifier.width(118.dp).aspectRatio(1f), onClick = onClick) {
+        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(tint.copy(alpha = 0.32f), Color.Transparent))))
+        Column(
+            Modifier.align(Alignment.Center).padding(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(icon, null, tint = tint, modifier = Modifier.size(36.dp))
+            Spacer(Modifier.height(8.dp))
+            Text(title, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium)
             Text("($count)", color = c.textDim, style = MaterialTheme.typography.labelSmall)
         }
     }
@@ -314,7 +471,7 @@ private fun PlaylistChip(title: String, count: String, icon: androidx.compose.ui
 @Composable
 private fun MixCard(kind: MixKind, tracks: List<Track>, onClick: () -> Unit) {
     val c = LocalMaysk.current
-    GlassCard(Modifier.width(188.dp), onClick = onClick) {
+    GlassCard(Modifier.width(196.dp), onClick = onClick) {
         Column(Modifier.padding(12.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 tracks.take(2).forEach { t ->
