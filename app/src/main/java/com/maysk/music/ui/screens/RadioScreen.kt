@@ -77,7 +77,7 @@ fun RadioScreen() {
     Column(Modifier.fillMaxSize()) {
         TopBar("Радио")
         LazyColumn(
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp, bottom = 24.dp),
+            contentPadding = PaddingValues(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {

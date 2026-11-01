@@ -85,7 +85,7 @@ fun TrimScreen() {
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
             LazyColumn(
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp, bottom = 24.dp),
+                contentPadding = PaddingValues(start = 12.dp, top = 4.dp, end = 12.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(lib.tracks.take(300), key = { it.id }) { t ->
