@@ -111,6 +111,7 @@ import com.maysk.music.data.Track
 import com.maysk.music.data.VisualizerStyle
 import com.maysk.music.data.formatTime
 import com.maysk.music.ui.LocalActions
+import com.maysk.music.ui.LocalStrings
 import com.maysk.music.ui.Route
 import com.maysk.music.ui.components.Artwork
 import com.maysk.music.ui.components.SleepTimerDialog

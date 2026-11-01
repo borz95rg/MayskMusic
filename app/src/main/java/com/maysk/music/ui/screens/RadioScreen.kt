@@ -57,6 +57,7 @@ import com.maysk.music.ui.theme.LocalMaysk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import java.net.HttpURLConnection
@@ -174,13 +175,16 @@ private suspend fun loadRegionStations(region: RadioRegion): List<RadioStation> 
         .distinctBy { it.streamUrl }
         .take(20)
 
-    val candidates = (fromApi + (fallback[region] ?: emptyList())).distinctBy { it.streamUrl }
+    val fallbackList = fallback[region] ?: emptyList()
+    val candidates = (fromApi + fallbackList).distinctBy { it.streamUrl }
     val checked = candidates.map { st -> async { if (probeUrl(st.streamUrl)) st else null } }
-        .awaitAll().filterNotNull()
+        .awaitAll()
+        .filterNotNull()
 
-    checked.ifEmpty {
-        (fallback[region] ?: emptyList()).filter { probeUrl(it.streamUrl) }
-    }.ifEmpty { fallback[region] ?: emptyList() }
+    if (checked.isNotEmpty()) return@coroutineScope checked
+    val probedFallback = fallbackList.filter { probeUrl(it.streamUrl) }
+    if (probedFallback.isNotEmpty()) return@coroutineScope probedFallback
+    fallbackList
 }
 
 @Composable
