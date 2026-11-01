@@ -25,7 +25,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -67,14 +66,13 @@ fun TrimScreen(initialTrackId: Long = -1L) {
     var startMs by remember { mutableStateOf(0f) }
     var endMs by remember { mutableStateOf(0f) }
     var busy by remember { mutableStateOf(false) }
-   var saveName by remember(selected) {
-    mutableStateOf(
-        selected?.let { t ->
-            t.title.take(40).ifBlank { t.fileName.substringBeforeLast('.') }
-        } ?: ""
-    )
-}
-    var outFormat by remember { mutableStateOf("m4a") }  // m4a | mp3
+    var saveName by remember(selected) {
+        mutableStateOf(
+            selected?.let { t ->
+                t.title.take(40).ifBlank { t.fileName.substringBeforeLast('.') }
+            } ?: "",
+        )
+    }
     var showSaveDialog by remember { mutableStateOf(false) }
 
     // Текущий трек из плеера или initialTrackId
@@ -235,76 +233,72 @@ fun TrimScreen(initialTrackId: Long = -1L) {
         }
     }
 
-    if (showSaveDialog && track != null) {
-        AlertDialog(
-            onDismissRequest = { if (!busy) showSaveDialog = false },
-            title = { Text("Сохранить обрезку") },
-            text = {
-                Column {
-                    Text("Название", style = MaterialTheme.typography.labelMedium)
-                    Spacer(Modifier.height(6.dp))
-                    OutlinedTextField(
-                        value = saveName,
-                        onValueChange = { saveName = it },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text("Формат", style = MaterialTheme.typography.labelMedium)
-                    Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = outFormat == "m4a",
-                            onClick = { outFormat = "m4a" },
-                            label = { Text("M4A (AAC)") },
-                        )
-                        FilterChip(
-                            selected = outFormat == "mp3",
-                            onClick = { outFormat = "mp3" },
-                            label = { Text("MP3") },
+    val trackToSave = selected
+    if (showSaveDialog && trackToSave != null) {
+        SaveTrimDialog(
+            name = saveName,
+            onNameChange = { saveName = it },
+            onDismiss = { if (!busy) showSaveDialog = false },
+            onConfirm = {
+                showSaveDialog = false
+                busy = true
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        FileOps.trimTrack(
+                            ctx, trackToSave, startMs.toLong(), endMs.toLong(),
+                            asCopy = true,
+                            customName = saveName,
                         )
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        if (outFormat == "mp3")
-                            "На Android файл будет AAC в контейнере M4A (расширение .m4a) — так надёжнее. Качество как у MP3 128k."
-                        else
-                            "M4A (AAC) — лучшая совместимость с обрезкой.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = c.textDim,
-                    )
+                    busy = false
+                    if (result.error != null) {
+                        a.toast(result.error)
+                    } else {
+                        a.toast("Сохранено в Music/Maysk/")
+                        a.container.library.rescan()
+                        a.nav.pop()
+                    }
                 }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showSaveDialog = false
-                        busy = true
-                        scope.launch {
-                            val result = withContext(Dispatchers.IO) {
-                                FileOps.trimTrack(
-                                    ctx, track, startMs.toLong(), endMs.toLong(),
-                                    asCopy = true,
-                                    customName = saveName,
-                                    format = outFormat,
-                                )
-                            }
-                            busy = false
-                            if (result.error != null) {
-                                a.toast(result.error)
-                            } else {
-                                a.toast("Сохранено в Music/Maysk/")
-                                a.container.library.rescan()
-                                a.nav.pop()
-                            }
-                        }
-                    },
-                    enabled = saveName.isNotBlank(),
-                ) { Text("Сохранить") }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { showSaveDialog = false }) { Text("Отмена") }
             },
         )
     }
+}
+
+/** Диалог сохранения обрезанного фрагмента: название файла и подтверждение. */
+@Composable
+private fun SaveTrimDialog(
+    name: String,
+    onNameChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val c = LocalMaysk.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Сохранить обрезку") },
+        text = {
+            Column {
+                Text("Название", style = MaterialTheme.typography.labelMedium)
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = onNameChange,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Файл сохранится в формате M4A (AAC) в Music/Maysk/.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.textDim,
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onConfirm, enabled = name.isNotBlank()) { Text("Сохранить") }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) { Text("Отмена") }
+        },
+    )
 }

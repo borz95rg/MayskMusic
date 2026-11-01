@@ -59,7 +59,7 @@ object FileOps {
             val res = TagField.entries.associateWith { f -> runCatching { tag.getFirst(f.key) }.getOrNull().orEmpty() }
             tmp.delete()
             res.mapValues { (k, v) -> v.ifBlank { if (k == TagField.ALBUM_ARTIST) "" else fallback[k].orEmpty() } }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             fallback
         }
     }
@@ -88,7 +88,7 @@ object FileOps {
             null
         } catch (e: SecurityException) {
             "Нет разрешения на изменение файла"
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             "Ошибка записи тегов: ${e.message ?: e.javaClass.simpleName}"
         } finally {
             tmp.delete()
@@ -101,7 +101,7 @@ object FileOps {
             val f = File(dir, "$prefix-${t.id}.${t.extension.ifEmpty { "mp3" }}")
             val copied = context.contentResolver.openInputStream(t.uri)?.use { input -> f.outputStream().use { input.copyTo(it) } }
             if (copied == null) null else f
-        } catch (e: Throwable) { null }
+        } catch (e: Exception) { null }
     }
 
     /** Обновить запись в MediaStore после изменения файла. */
@@ -163,7 +163,7 @@ object FileOps {
             }
         } catch (e: SecurityException) {
             OpResult("Нет разрешения на изменение файла")
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             OpResult("Ошибка: ${e.message ?: e.javaClass.simpleName}")
         }
     }
@@ -186,7 +186,7 @@ object FileOps {
                     val out = cr.openOutputStream(newUri) ?: throw IllegalStateException("нет доступа")
                     out.use { o -> cr.openInputStream(t.uri)?.use { it.copyTo(o) } ?: throw IllegalStateException("файл недоступен") }
                     cr.update(newUri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
                     runCatching { cr.delete(newUri, null, null) }
                     throw e
                 }
@@ -199,7 +199,7 @@ object FileOps {
             }
         } catch (e: SecurityException) {
             OpResult("Нет разрешения на запись")
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             OpResult("Ошибка копирования: ${e.message ?: e.javaClass.simpleName}")
         }
     }
@@ -266,36 +266,41 @@ object FileOps {
         endMs: Long,
         asCopy: Boolean,
         customName: String? = null,
-        format: String = "m4a",
     ): OpResult {
-        if (endMs <= startMs + 500) return OpResult("Слишком короткий фрагмент (минимум ~0.5 с)")
-        if (startMs < 0 || endMs > t.durationMs + 2000) return OpResult("Неверный диапазон")
+        trimRangeError(startMs, endMs, t.durationMs)?.let { return OpResult(it) }
         return try {
             val tmpIn = copyToCache(context, t, "trim-in") ?: return OpResult("Не удалось прочитать файл")
-            val outFile = File(context.cacheDir, "trim-out-${System.currentTimeMillis()}.m4a")
-            val err = cutAudioFile(tmpIn, outFile, startMs, endMs)
-            tmpIn.delete()
-            if (err != null) {
-                outFile.delete()
-                return OpResult(err)
+            val base = safeFileName(
+                customName?.takeIf { it.isNotBlank() } ?: t.title.take(40).ifBlank { t.fileName.substringBeforeLast('.') },
+                fallback = "Обрезка",
+            )
+            val displayName = if (asCopy) "$base (обрезка).m4a" else "$base.m4a"
+            try {
+                saveProcessed(context, "trim-out", displayName) { out -> cutAudioFile(tmpIn, out, startMs, endMs) }
+            } finally {
+                tmpIn.delete()
             }
-            val base = (customName?.trim()?.take(60)
-                ?: t.title.take(40).ifBlank { t.fileName.substringBeforeLast('.') })
-                .ifBlank { "Обрезка" }
-                .replace(Regex("[\\/:*?\"<>|]"), "_")
-            val useMp3 = format.equals("mp3", true)
-            // MediaMuxer пишет AAC/M4A. Для «MP3» сохраняем M4A (AAC) — реально играет везде.
-            val ext = if (useMp3) "m4a" else "m4a"
-            val displayName = buildString {
-                append(base)
-                if (asCopy) append(" (обрезка)")
-                append('.').append(ext)
-            }
-            val saved = saveAudioToMusic(context, outFile, displayName, "audio/mp4")
-            outFile.delete()
-            saved
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             OpResult("Ошибка обрезки: ${e.message ?: e.javaClass.simpleName}")
+        }
+    }
+
+    /**
+     * Общая схема: создать временный .m4a, заполнить его через [produce] (вернёт текст ошибки или null),
+     * сохранить в Music/Maysk и удалить временный файл.
+     */
+    private fun saveProcessed(
+        context: Context,
+        prefix: String,
+        displayName: String,
+        produce: (File) -> String?,
+    ): OpResult {
+        val out = File(context.cacheDir, "$prefix-${System.currentTimeMillis()}.m4a")
+        return try {
+            val err = produce(out)
+            if (err != null) OpResult(err) else saveAudioToMusic(context, out, displayName, "audio/mp4")
+        } finally {
+            out.delete()
         }
     }
 
@@ -306,29 +311,23 @@ object FileOps {
         context: Context,
         videoUri: android.net.Uri,
         displayName: String?,
-        format: String = "m4a",
     ): OpResult {
         return try {
             val tmpIn = File(context.cacheDir, "vid-in-${System.currentTimeMillis()}")
-            context.contentResolver.openInputStream(videoUri)?.use { input ->
-                tmpIn.outputStream().use { input.copyTo(it) }
-            } ?: return OpResult("Не удалось открыть видео")
-            val outFile = File(context.cacheDir, "vid-out-${System.currentTimeMillis()}.m4a")
-            val err = extractAudioTrack(tmpIn, outFile)
-            tmpIn.delete()
-            if (err != null) {
-                outFile.delete()
-                return OpResult(err)
+            try {
+                context.contentResolver.openInputStream(videoUri)?.use { input ->
+                    tmpIn.outputStream().use { input.copyTo(it) }
+                } ?: return OpResult("Не удалось открыть видео")
+                val base = safeFileName(
+                    displayName?.substringBeforeLast('.'),
+                    fallback = "Из видео ${System.currentTimeMillis()}",
+                    maxLength = 50,
+                )
+                saveProcessed(context, "vid-out", "$base.m4a") { out -> extractAudioTrack(tmpIn, out) }
+            } finally {
+                tmpIn.delete()
             }
-            val base = (displayName?.substringBeforeLast('.')?.take(50)
-                ?: "Из видео ${System.currentTimeMillis()}")
-                .replace(Regex("[\\/:*?\"<>|]"), "_")
-                .ifBlank { "Из_видео" }
-            val display = "$base.m4a"
-            val saved = saveAudioToMusic(context, outFile, display, "audio/mp4")
-            outFile.delete()
-            saved
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             OpResult("Ошибка извлечения: ${e.message ?: e.javaClass.simpleName}")
         }
     }
@@ -352,7 +351,7 @@ object FileOps {
                     values.put(MediaStore.MediaColumns.IS_PENDING, 0)
                     cr.update(uri, values, null, null)
                     OpResult(null, listOf(uri.toString()))
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
                     cr.delete(uri, null, null)
                     throw e
                 }
@@ -362,7 +361,7 @@ object FileOps {
                 src.copyTo(dest, overwrite = false)
                 OpResult(null, listOf(dest.absolutePath))
             }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             OpResult("Сохранение: ${e.message ?: e.javaClass.simpleName}")
         }
     }
@@ -388,7 +387,7 @@ object FileOps {
             }
             extractor.release()
             return reencodeSegment(input, output, startMs, endMs)
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             return "Обрезка не удалась (${e.message})"
         } finally {
             try { extractor.release() } catch (_: Throwable) {}
@@ -426,7 +425,7 @@ object FileOps {
             muxer.stop()
             muxer.release()
             if (output.length() < 100) "Пустой файл" else null
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             e.message ?: "remux failed"
         }
     }
@@ -557,7 +556,7 @@ object FileOps {
             try { muxer?.stop() } catch (_: Throwable) {}
             muxer?.release()
             if (output.length() < 100) "Пустой результат перекодирования" else null
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             "Перекодирование: ${e.message}"
         } finally {
             try { decoder?.stop(); decoder?.release() } catch (_: Throwable) {}
@@ -594,7 +593,7 @@ object FileOps {
             muxer.release()
             if (output.length() < 100) return "Пустой результат"
             null
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             "Не удалось извлечь аудио: ${e.message}"
         } finally {
             try { extractor.release() } catch (_: Throwable) {}

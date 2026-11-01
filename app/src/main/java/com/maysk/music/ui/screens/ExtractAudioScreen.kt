@@ -19,7 +19,6 @@ import androidx.compose.material.icons.rounded.VideoFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -57,7 +56,6 @@ fun ExtractAudioScreen() {
     var busy by remember { mutableStateOf(false) }
     var pendingUri by remember { mutableStateOf<Uri?>(null) }
     var saveName by remember { mutableStateOf("") }
-    var outFormat by remember { mutableStateOf("m4a") }
     var showDialog by remember { mutableStateOf(false) }
     var lastSavedUri by remember { mutableStateOf<String?>(null) }
 
@@ -104,7 +102,7 @@ fun ExtractAudioScreen() {
         busy = true
         scope.launch {
             val result = withContext(Dispatchers.IO) {
-                FileOps.extractAudioFromVideo(ctx, uri, saveName, outFormat)
+                FileOps.extractAudioFromVideo(ctx, uri, saveName)
             }
             busy = false
             pendingUri = null
@@ -184,24 +182,9 @@ fun ExtractAudioScreen() {
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    Spacer(Modifier.height(12.dp))
-                    Text("Формат")
-                    Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = outFormat == "m4a",
-                            onClick = { outFormat = "m4a" },
-                            label = { Text("M4A (AAC)") },
-                        )
-                        FilterChip(
-                            selected = outFormat == "mp3",
-                            onClick = { outFormat = "mp3" },
-                            label = { Text("MP3") },
-                        )
-                    }
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Файл сохраняется как M4A (AAC) — на Android так надёжнее, чем реальный MP3 без кодека.",
+                        "Файл сохранится в формате M4A (AAC) в Music/Maysk/.",
                         style = MaterialTheme.typography.bodySmall,
                         color = c.textDim,
                     )

@@ -102,4 +102,6 @@ dependencies {
 
     // Чтение и запись тегов аудиофайлов
     implementation("net.jthink:jaudiotagger:3.0.1")
+
+    testImplementation("junit:junit:4.13.2")
 }

@@ -1,0 +1,38 @@
+name: Check build
+
+# Быстрая проверка (компиляция + тесты) без публикации релиза.
+# Запускается на ветках, отличных от main/master, и на pull request —
+# так ошибки видно ДО того, как код попадёт в main.
+on:
+  pull_request:
+  push:
+    branches-ignore: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Compile and run unit tests
+        run: |
+          chmod +x ./gradlew
+          ./gradlew testDebugUnitTest compileReleaseKotlin --no-daemon --stacktrace
