@@ -266,7 +266,9 @@ object FileOps {
         endMs: Long,
         asCopy: Boolean,
         customName: String? = null,
+        format: String = "m4a",
     ): OpResult {
+        // В Android нет встроенного MP3-энкодера: при format == "mp3" файл всё равно сохраняется как AAC (.m4a).
         trimRangeError(startMs, endMs, t.durationMs)?.let { return OpResult(it) }
         return try {
             val tmpIn = copyToCache(context, t, "trim-in") ?: return OpResult("Не удалось прочитать файл")
