@@ -60,7 +60,6 @@ import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.remember
 import coil.compose.AsyncImage

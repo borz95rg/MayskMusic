@@ -110,7 +110,7 @@ fun MyMusicScreen() {
         Tile("Альбомы", "${lib.albums.size}", Icons.Rounded.Album, c.accent) { a.nav.push(Route.LibraryTab(1)) },
         Tile("Исполнители", "${lib.artists.size}", Icons.Rounded.Person, c.accent2) { a.nav.push(Route.LibraryTab(2)) },
         Tile("Жанры", "${lib.genres.size}", Icons.Rounded.Category, Color(0xFFF97316)) { a.nav.push(Route.LibraryTab(3)) },
-        Tile("Обрезать трек", null, Icons.Rounded.ContentCut, Color(0xFFEC4899)) { a.nav.push(Route.Trim) },
+        Tile("Обрезать трек", null, Icons.Rounded.ContentCut, Color(0xFFEC4899)) { a.nav.push(Route.Trim()) },
         Tile("Из видео", null, Icons.Rounded.VideoFile, Color(0xFF8B5CF6)) { a.nav.push(Route.ExtractAudio) },
         Tile("Статистика", null, Icons.Rounded.BarChart, c.accent3) { a.nav.push(Route.Stats) },
         Tile("Эквалайзер", null, Icons.Rounded.Equalizer, c.accent) { a.nav.push(Route.Equalizer) },
