@@ -235,7 +235,8 @@ fun TrimScreen(initialTrackId: Long = -1L) {
         }
     }
 
-    if (showSaveDialog && track != null) {
+    val trackToSave = selected
+    if (showSaveDialog && trackToSave != null) {
         AlertDialog(
             onDismissRequest = { if (!busy) showSaveDialog = false },
             title = { Text("Сохранить обрезку") },
@@ -283,7 +284,7 @@ fun TrimScreen(initialTrackId: Long = -1L) {
                         scope.launch {
                             val result = withContext(Dispatchers.IO) {
                                 FileOps.trimTrack(
-                                    ctx, track, startMs.toLong(), endMs.toLong(),
+                                    ctx, trackToSave, startMs.toLong(), endMs.toLong(),
                                     asCopy = true,
                                     customName = saveName,
                                     format = outFormat,
