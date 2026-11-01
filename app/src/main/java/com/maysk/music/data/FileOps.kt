@@ -245,4 +245,173 @@ object FileOps {
         if (!missingArtist && !titleIsFilename) return@mapNotNull null
         guessFromFilename(t)?.takeIf { g -> !(g.artist == t.artist && g.title == t.title) }
     }
+
+    // ------------------------------------------------------------------
+    // Обрезка и извлечение аудио
+    // ------------------------------------------------------------------
+
+    /**
+     * Обрезает трек [startMs]..[endMs].
+     * [asCopy] = true → новый файл «название (обрезка).ext» рядом / в Music;
+     * false → пытается заменить оригинал (на Android 10+ часто нужна копия).
+     */
+    fun trimTrack(context: Context, t: Track, startMs: Long, endMs: Long, asCopy: Boolean): OpResult {
+        if (endMs <= startMs + 500) return OpResult("Слишком короткий фрагмент (минимум ~0.5 с)")
+        if (startMs < 0 || endMs > t.durationMs + 2000) return OpResult("Неверный диапазон")
+        return try {
+            val tmpIn = copyToCache(context, t, "trim-in") ?: return OpResult("Не удалось прочитать файл")
+            val outFile = File(context.cacheDir, "trim-out-${System.currentTimeMillis()}.m4a")
+            val err = cutAudioFile(tmpIn, outFile, startMs, endMs)
+            tmpIn.delete()
+            if (err != null) {
+                outFile.delete()
+                return OpResult(err)
+            }
+            val displayName = buildString {
+                append(t.title.take(40).ifBlank { t.fileName.substringBeforeLast('.') })
+                if (asCopy) append(" (обрезка)")
+                append(".m4a")
+            }.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+            val saved = saveAudioToMusic(context, outFile, displayName, "audio/mp4")
+            outFile.delete()
+            saved
+        } catch (e: Throwable) {
+            OpResult("Ошибка обрезки: ${e.message ?: e.javaClass.simpleName}")
+        }
+    }
+
+    /**
+     * Извлекает аудиодорожку из видео [videoUri] и сохраняет как .m4a в Music.
+     */
+    fun extractAudioFromVideo(context: Context, videoUri: android.net.Uri, displayName: String?): OpResult {
+        return try {
+            val tmpIn = File(context.cacheDir, "vid-in-${System.currentTimeMillis()}")
+            context.contentResolver.openInputStream(videoUri)?.use { input ->
+                tmpIn.outputStream().use { input.copyTo(it) }
+            } ?: return OpResult("Не удалось открыть видео")
+            val outFile = File(context.cacheDir, "vid-out-${System.currentTimeMillis()}.m4a")
+            val err = extractAudioTrack(tmpIn, outFile)
+            tmpIn.delete()
+            if (err != null) {
+                outFile.delete()
+                return OpResult(err)
+            }
+            val name = (displayName?.substringBeforeLast('.')?.take(50)
+                ?: "Из видео ${System.currentTimeMillis()}")
+                .replace(Regex("[\\\\/:*?\"<>|]"), "_") + ".m4a"
+            val saved = saveAudioToMusic(context, outFile, name, "audio/mp4")
+            outFile.delete()
+            saved
+        } catch (e: Throwable) {
+            OpResult("Ошибка извлечения: ${e.message ?: e.javaClass.simpleName}")
+        }
+    }
+
+    private fun saveAudioToMusic(context: Context, src: File, displayName: String, mime: String): OpResult {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val cr = context.contentResolver
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, mime)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, "Music/Maysk/")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                val uri = cr.insert(collection, values) ?: return OpResult("Не удалось создать файл")
+                try {
+                    cr.openOutputStream(uri)?.use { out -> src.inputStream().use { it.copyTo(out) } }
+                        ?: throw IllegalStateException("нет записи")
+                    values.clear()
+                    values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    cr.update(uri, values, null, null)
+                    OpResult(null, listOf(uri.toString()))
+                } catch (e: Throwable) {
+                    cr.delete(uri, null, null)
+                    throw e
+                }
+            } else {
+                val dir = File(primaryPrefix + "Music/Maysk/").apply { mkdirs() }
+                val dest = uniqueFile(dir, displayName)
+                src.copyTo(dest, overwrite = false)
+                OpResult(null, listOf(dest.absolutePath))
+            }
+        } catch (e: Throwable) {
+            OpResult("Сохранение: ${e.message ?: e.javaClass.simpleName}")
+        }
+    }
+
+    /** Обрезка через MediaExtractor + MediaMuxer (лучше работает с AAC/M4A/MP4). */
+    private fun cutAudioFile(input: File, output: File, startMs: Long, endMs: Long): String? {
+        val extractor = android.media.MediaExtractor()
+        return try {
+            extractor.setDataSource(input.absolutePath)
+            val track = (0 until extractor.trackCount).firstOrNull { i ->
+                extractor.getTrackFormat(i).getString(android.media.MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            } ?: return "В файле нет аудиодорожки"
+            extractor.selectTrack(track)
+            val format = extractor.getTrackFormat(track)
+            extractor.seekTo(startMs * 1000, android.media.MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+            if (output.exists()) output.delete()
+            val muxer = android.media.MediaMuxer(output.absolutePath, android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            val dstTrack = muxer.addTrack(format)
+            muxer.start()
+            val buf = java.nio.ByteBuffer.allocate(256 * 1024)
+            val info = android.media.MediaCodec.BufferInfo()
+            val endUs = endMs * 1000
+            while (true) {
+                info.offset = 0
+                info.size = extractor.readSampleData(buf, 0)
+                if (info.size < 0) break
+                info.presentationTimeUs = extractor.sampleTime
+                if (info.presentationTimeUs > endUs) break
+                info.flags = extractor.sampleFlags
+                muxer.writeSampleData(dstTrack, buf, info)
+                extractor.advance()
+            }
+            muxer.stop()
+            muxer.release()
+            if (output.length() < 100) return "Получился пустой файл — формат может не поддерживаться"
+            null
+        } catch (e: Throwable) {
+            "Обрезка не удалась (${e.message}). Лучше работает с M4A/AAC/MP4."
+        } finally {
+            try { extractor.release() } catch (_: Throwable) {}
+        }
+    }
+
+    private fun extractAudioTrack(input: File, output: File): String? {
+        val extractor = android.media.MediaExtractor()
+        return try {
+            extractor.setDataSource(input.absolutePath)
+            val track = (0 until extractor.trackCount).firstOrNull { i ->
+                extractor.getTrackFormat(i).getString(android.media.MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            } ?: return "В видео нет аудиодорожки"
+            extractor.selectTrack(track)
+            val format = extractor.getTrackFormat(track)
+            if (output.exists()) output.delete()
+            val muxer = android.media.MediaMuxer(output.absolutePath, android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            val dstTrack = muxer.addTrack(format)
+            muxer.start()
+            val buf = java.nio.ByteBuffer.allocate(256 * 1024)
+            val info = android.media.MediaCodec.BufferInfo()
+            while (true) {
+                info.offset = 0
+                info.size = extractor.readSampleData(buf, 0)
+                if (info.size < 0) break
+                info.presentationTimeUs = extractor.sampleTime
+                info.flags = extractor.sampleFlags
+                muxer.writeSampleData(dstTrack, buf, info)
+                extractor.advance()
+            }
+            muxer.stop()
+            muxer.release()
+            if (output.length() < 100) return "Пустой результат"
+            null
+        } catch (e: Throwable) {
+            "Не удалось извлечь аудио: ${e.message}"
+        } finally {
+            try { extractor.release() } catch (_: Throwable) {}
+        }
+    }
 }

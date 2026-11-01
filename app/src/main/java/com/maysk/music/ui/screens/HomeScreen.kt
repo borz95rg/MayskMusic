@@ -147,7 +147,7 @@ fun HomeScreen() {
                 item { TrackCarousel(recentPlayed) }
             }
 
-            item { SectionHeader("Плейлисты", "Все") { a.nav.selectTab(3) } }
+            item { SectionHeader("Плейлисты", "Все") { a.nav.selectTab(2) } }
             item {
                 LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     item {
@@ -193,7 +193,7 @@ fun HomeScreen() {
             }
 
             if (lib.folders.isNotEmpty()) {
-                item { SectionHeader("Папки", "Все") { a.nav.selectTab(2) } }
+                item { SectionHeader("Папки", "Все") { a.nav.push(Route.Folders) } }
                 item {
                     val names by a.container.userData.folderNames.collectAsState()
                     LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -314,16 +314,16 @@ private fun PlaylistChip(title: String, count: String, icon: androidx.compose.ui
 @Composable
 private fun MixCard(kind: MixKind, tracks: List<Track>, onClick: () -> Unit) {
     val c = LocalMaysk.current
-    GlassCard(Modifier.width(170.dp), onClick = onClick) {
-        Column(Modifier.padding(10.dp)) {
-            Row {
+    GlassCard(Modifier.width(188.dp), onClick = onClick) {
+        Column(Modifier.padding(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 tracks.take(2).forEach { t ->
-                    Artwork(t.artUri, Modifier.weight(1f).aspectRatio(1f).padding(2.dp), corner = 10.dp, seed = t.albumId)
+                    Artwork(t.artUri, Modifier.weight(1f).aspectRatio(1f), corner = 12.dp, seed = t.albumId)
                 }
                 if (tracks.size < 2) Spacer(Modifier.weight(1f))
             }
-            Spacer(Modifier.height(8.dp))
-            Text(kind.title, color = c.text, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+            Spacer(Modifier.height(10.dp))
+            Text(kind.title, color = c.text, style = MaterialTheme.typography.titleMedium, maxLines = 1, fontWeight = FontWeight.SemiBold)
             Text("${tracks.size} треков · ${kind.subtitle}", color = c.textDim, style = MaterialTheme.typography.bodySmall, maxLines = 2)
         }
     }

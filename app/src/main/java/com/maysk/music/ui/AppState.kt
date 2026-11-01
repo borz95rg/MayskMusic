@@ -17,6 +17,7 @@ sealed interface Route {
     data object Tracks : Route
     data object Folders : Route
     data object Playlists : Route
+    data object Radio : Route
     data object MyMusic : Route
     data class AlbumR(val id: Long) : Route
     data class ArtistR(val name: String) : Route
@@ -35,9 +36,12 @@ sealed interface Route {
     data object Ai : Route
     data class Similar(val trackId: Long) : Route
     data class Mood(val kind: com.maysk.music.data.MoodKind) : Route
+    data object Trim : Route
+    data object ExtractAudio : Route
 }
 
-val RootRoutes = listOf(Route.Home, Route.Tracks, Route.Folders, Route.Playlists, Route.MyMusic)
+/** Нижняя навигация: Главная · Треки · Плейлисты · Радио · Моя музыка */
+val RootRoutes = listOf(Route.Home, Route.Tracks, Route.Playlists, Route.Radio, Route.MyMusic)
 
 class Nav {
     var tab by mutableIntStateOf(0)

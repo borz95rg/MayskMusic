@@ -49,6 +49,7 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -103,6 +104,7 @@ import com.maysk.music.ui.screens.AppearanceScreen
 import com.maysk.music.ui.screens.ArtistScreen
 import com.maysk.music.ui.screens.DuplicatesScreen
 import com.maysk.music.ui.screens.EqualizerScreen
+import com.maysk.music.ui.screens.ExtractAudioScreen
 import com.maysk.music.ui.screens.FolderManagerScreen
 import com.maysk.music.ui.screens.FolderScreen
 import com.maysk.music.ui.screens.FoldersScreen
@@ -113,10 +115,12 @@ import com.maysk.music.ui.screens.MyMusicScreen
 import com.maysk.music.ui.screens.PlayerScreen
 import com.maysk.music.ui.screens.PlaylistScreen
 import com.maysk.music.ui.screens.PlaylistsScreen
+import com.maysk.music.ui.screens.RadioScreen
 import com.maysk.music.ui.screens.SearchScreen
 import com.maysk.music.ui.screens.SettingsScreen
 import com.maysk.music.ui.screens.StatsScreen
 import com.maysk.music.ui.screens.TracksScreen
+import com.maysk.music.ui.screens.TrimScreen
 import com.maysk.music.ui.theme.LocalMaysk
 import com.maysk.music.ui.theme.MayskTheme
 import com.maysk.music.ui.theme.buildColors
@@ -370,6 +374,7 @@ private fun RouteContent(route: Route) {
         is Route.LibraryTab -> TracksScreen(initialTab = route.tab, showBack = true)
         Route.Folders -> FoldersScreen()
         Route.Playlists -> PlaylistsScreen()
+        Route.Radio -> RadioScreen()
         Route.MyMusic -> MyMusicScreen()
         is Route.AlbumR -> AlbumScreen(route.id)
         is Route.ArtistR -> ArtistScreen(route.name)
@@ -387,6 +392,8 @@ private fun RouteContent(route: Route) {
         Route.Ai -> AiScreen()
         is Route.Similar -> SimilarScreen(route.trackId)
         is Route.Mood -> MoodScreen(route.kind)
+        Route.Trim -> TrimScreen()
+        Route.ExtractAudio -> ExtractAudioScreen()
     }
 }
 
@@ -396,8 +403,8 @@ private fun BottomNav(nav: Nav) {
     val items = listOf(
         Triple("Главная", Icons.Rounded.Home, 0),
         Triple("Треки", Icons.Rounded.MusicNote, 1),
-        Triple("Папки", Icons.Rounded.Folder, 2),
-        Triple("Плейлисты", Icons.Rounded.QueueMusic, 3),
+        Triple("Плейлисты", Icons.Rounded.QueueMusic, 2),
+        Triple("Радио", Icons.Rounded.Radio, 3),
         Triple("Моя музыка", Icons.Rounded.Person, 4),
     )
     Row(

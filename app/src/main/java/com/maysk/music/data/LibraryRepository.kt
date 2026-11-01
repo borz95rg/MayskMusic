@@ -57,7 +57,8 @@ class LibraryRepository(
     private var observerRegistered = false
 
     private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
-        override fun onChange(selfChange: Boolean) { rescan(debounceMs = 1500) }
+        override fun onChange(selfChange: Boolean) { rescan(debounceMs = 2500) }
+        override fun onChange(selfChange: Boolean, uri: android.net.Uri?) { rescan(debounceMs = 2500) }
     }
 
     fun start() {

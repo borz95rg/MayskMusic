@@ -84,7 +84,7 @@ fun FoldersScreen() {
     val cols = if (LocalUi.current.simpleMode) 1 else 2
 
     Column(Modifier.fillMaxSize()) {
-        TopBar("Папки") {
+        TopBar("Папки", onBack = { a.nav.pop() }) {
             IconButton(onClick = { a.nav.push(Route.FolderManager) }) { Icon(Icons.Rounded.Tune, "Управление папками", tint = c.text) }
         }
         LazyVerticalGrid(
