@@ -67,9 +67,13 @@ fun TrimScreen(initialTrackId: Long = -1L) {
     var startMs by remember { mutableStateOf(0f) }
     var endMs by remember { mutableStateOf(0f) }
     var busy by remember { mutableStateOf(false) }
-    var saveName by remember(track) {
-        mutableStateOf(track?.title?.take(40)?.ifBlank { track.fileName.substringBeforeLast('.') } ?: "")
-    }
+   var saveName by remember(selected) {
+    mutableStateOf(
+        selected?.let { t ->
+            t.title.take(40).ifBlank { t.fileName.substringBeforeLast('.') }
+        } ?: ""
+    )
+}
     var outFormat by remember { mutableStateOf("m4a") }  // m4a | mp3
     var showSaveDialog by remember { mutableStateOf(false) }
 
