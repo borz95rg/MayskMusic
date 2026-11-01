@@ -85,7 +85,11 @@ fun AppearanceScreen() {
                     android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
                 )
             } catch (_: Exception) { }
-            draft = draft.copy(customBgUri = uri.toString(), background = BackgroundStyle.IMAGE)
+            val next = draft.copy(customBgUri = uri.toString(), background = BackgroundStyle.IMAGE)
+            draft = next
+            a.container.settings.update {
+                it.copy(customBgUri = next.customBgUri, background = next.background)
+            }
         }
     }
     var tab by remember { mutableIntStateOf(0) }
@@ -144,7 +148,14 @@ fun AppearanceScreen() {
                     Label("Скругление: ${draft.corner} dp")
                     Slider(draft.corner.toFloat(), { draft = draft.copy(corner = it.toInt()) }, valueRange = 4f..32f)
                     Label("Фон приложения")
-                    ChoiceChipRow(BackgroundStyle.entries.map { it.title }, draft.background.ordinal, { draft = draft.copy(background = BackgroundStyle.entries[it]) })
+                    ChoiceChipRow(BackgroundStyle.entries.map { it.title }, draft.background.ordinal, {
+                        val bg = BackgroundStyle.entries[it]
+                        draft = draft.copy(background = bg)
+                        // Сразу применяем обои/фото, чтобы было видно без «Сохранить»
+                        if (bg == BackgroundStyle.WALLPAPER || bg == BackgroundStyle.IMAGE) {
+                            a.container.settings.update { s -> s.copy(background = bg, customBgUri = draft.customBgUri) }
+                        }
+                    })
                     if (draft.background == BackgroundStyle.IMAGE) {
                         Text(
                             if (draft.customBgUri.isBlank()) "Выберите фото из галереи — оно станет фоном приложения"

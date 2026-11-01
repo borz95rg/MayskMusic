@@ -93,11 +93,15 @@ fun buildColors(s: AppSettings, dynamicAccent: Color?, systemDark: Boolean): May
         ThemePreset.LAVENDER -> MayskColors(true, Color(0xFFF3EEFF), Color(0xFFE8E0FA), Color.White, 0.8f, Color(0x1A000000),
             Color(0xFF8B5CF6), Color(0xFFA78BFA), Color(0xFFC4B5FD), button, Color(0xFF1E1533), Color(0xFF1E1533).copy(alpha = 0.6f), false, s.corner.dp, s.background, s.highContrast)
     }
-    return if (s.highContrast) base.copy(
-        textDim = if (base.isLight) Color(0xFF15122B) else Color.White.copy(alpha = 0.9f),
-        border = if (base.isLight) Color.Black.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.35f),
-        glassAlpha = if (base.isLight) 0.95f else (base.glassAlpha + 0.08f).coerceAtMost(1f),
-    ) else base
+    // Пользовательский фон (обои / фото) важнее пресета SOLID
+    val withBg = if (s.background == BackgroundStyle.WALLPAPER || s.background == BackgroundStyle.IMAGE) {
+        base.copy(background = s.background)
+    } else base
+    return if (s.highContrast) withBg.copy(
+        textDim = if (withBg.isLight) Color(0xFF15122B) else Color.White.copy(alpha = 0.9f),
+        border = if (withBg.isLight) Color.Black.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.35f),
+        glassAlpha = if (withBg.isLight) 0.95f else (withBg.glassAlpha + 0.08f).coerceAtMost(1f),
+    ) else withBg
 }
 
 private fun lerpDark(c: Color, f: Float) = Color(c.red * f, c.green * f, c.blue * f, 1f)

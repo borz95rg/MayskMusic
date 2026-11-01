@@ -113,7 +113,7 @@ fun SettingsScreen() {
                 Item(Icons.Rounded.Timer, "Таймер сна", null) { timer = true }
             }
             Group("Интерфейс") {
-                Item(Icons.Rounded.Palette, "Оформление", "Темы, цвета, плеер, шрифты") { a.nav.push(Route.Appearance) }
+                Item(Icons.Rounded.Palette, str.appearance, "Темы · цвета · фон · плеер") { a.nav.push(Route.Appearance) }
                 ToggleItem(Icons.Rounded.Accessibility, "Простой режим", "Крупные кнопки и текст", settings.simpleMode) { v ->
                     a.container.settings.update { it.copy(simpleMode = v) }
                 }

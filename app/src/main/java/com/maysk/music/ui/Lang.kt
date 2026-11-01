@@ -42,6 +42,12 @@ data class Strings(
     val kazakh: String,
     val russian: String,
     val stationsCount: String,
+    val appearance: String,
+    val equalizer: String,
+    val save: String,
+    val cancel: String,
+    val format: String,
+    val titleName: String,
 )
 
 fun stringsFor(lang: AppLang): Strings = when (lang) {
@@ -57,6 +63,8 @@ fun stringsFor(lang: AppLang): Strings = when (lang) {
         addedTrack = "Добавлен 1 новый трек", addedTracks = "Добавлено треков",
         chechen = "Чеченские", ingush = "Ингушские", kazakh = "Қазақша / Казахские", russian = "Российские",
         stationsCount = "станций",
+        appearance = "Оформление", equalizer = "Эквалайзер", save = "Сохранить", cancel = "Отмена",
+        format = "Формат", titleName = "Название",
     )
     AppLang.KK -> Strings(
         home = "Басты", tracks = "Тректер", playlists = "Плейлисттер", radio = "Радио", myMusic = "Менің музыкам",
@@ -70,6 +78,8 @@ fun stringsFor(lang: AppLang): Strings = when (lang) {
         addedTrack = "1 жаңа трек қосылды", addedTracks = "Қосылған тректер",
         chechen = "Шешен", ingush = "Ингуш", kazakh = "Қазақ", russian = "Ресей",
         stationsCount = "станция",
+        appearance = "Рәсімдеу", equalizer = "Эквалайзер", save = "Сақтау", cancel = "Болдырмау",
+        format = "Формат", titleName = "Атауы",
     )
     AppLang.EN -> Strings(
         home = "Home", tracks = "Tracks", playlists = "Playlists", radio = "Radio", myMusic = "My music",
@@ -83,6 +93,8 @@ fun stringsFor(lang: AppLang): Strings = when (lang) {
         addedTrack = "1 new track added", addedTracks = "Tracks added",
         chechen = "Chechen", ingush = "Ingush", kazakh = "Kazakh", russian = "Russian",
         stationsCount = "stations",
+        appearance = "Appearance", equalizer = "Equalizer", save = "Save", cancel = "Cancel",
+        format = "Format", titleName = "Name",
     )
 }
 

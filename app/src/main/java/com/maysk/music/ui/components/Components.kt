@@ -104,8 +104,11 @@ fun AppBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.(
         if (c.background == com.maysk.music.data.BackgroundStyle.WALLPAPER) {
             val bmp = remember {
                 try {
-                    val d = WallpaperManager.getInstance(ctx).drawable
-                    (d as? BitmapDrawable)?.bitmap
+                    val wm = WallpaperManager.getInstance(ctx)
+                    val d = try { wm.drawable } catch (_: Exception) { null }
+                    val b = (d as? BitmapDrawable)?.bitmap
+                    if (b != null && !b.isRecycled) b.copy(b.config ?: android.graphics.Bitmap.Config.ARGB_8888, false)
+                    else null
                 } catch (_: Exception) { null }
             }
             if (bmp != null) {
@@ -114,9 +117,9 @@ fun AppBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.(
                     contentDescription = null,
                     modifier = Modifier.matchParentSize(),
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                    alpha = 0.55f,
+                    alpha = 0.72f,
                 )
-                Box(Modifier.matchParentSize().background(c.bgBottom.copy(alpha = 0.45f)))
+                Box(Modifier.matchParentSize().background(c.bgBottom.copy(alpha = 0.35f)))
             }
         }
         // Фото из галереи
@@ -126,9 +129,9 @@ fun AppBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.(
                 contentDescription = null,
                 modifier = Modifier.matchParentSize(),
                 contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                alpha = 0.55f,
+                alpha = 0.75f,
             )
-            Box(Modifier.matchParentSize().background(c.bgBottom.copy(alpha = 0.45f)))
+            Box(Modifier.matchParentSize().background(c.bgBottom.copy(alpha = 0.32f)))
         }
         Box(Modifier.fillMaxSize(), content = content)
     }

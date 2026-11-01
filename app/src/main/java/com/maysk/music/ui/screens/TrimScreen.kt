@@ -24,6 +24,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -64,6 +67,11 @@ fun TrimScreen(initialTrackId: Long = -1L) {
     var startMs by remember { mutableStateOf(0f) }
     var endMs by remember { mutableStateOf(0f) }
     var busy by remember { mutableStateOf(false) }
+    var saveName by remember(track) {
+        mutableStateOf(track?.title?.take(40)?.ifBlank { track.fileName.substringBeforeLast('.') } ?: "")
+    }
+    var outFormat by remember { mutableStateOf("m4a") }  // m4a | mp3
+    var showSaveDialog by remember { mutableStateOf(false) }
 
     // Текущий трек из плеера или initialTrackId
     LaunchedEffect(lib.tracks, initialTrackId, playerState.currentId) {
@@ -197,7 +205,7 @@ fun TrimScreen(initialTrackId: Long = -1L) {
 
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    "Сохраняется копия (M4A) в Music/Maysk/. Оригинал не меняется.",
+                    "Копия сохранится в Music/Maysk/. Оригинал не меняется.",
                     color = c.textDim,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -211,30 +219,88 @@ fun TrimScreen(initialTrackId: Long = -1L) {
                     }
                 } else {
                     Button(
-                        onClick = {
-                            busy = true
-                            scope.launch {
-                                val result = withContext(Dispatchers.IO) {
-                                    FileOps.trimTrack(ctx, track, startMs.toLong(), endMs.toLong(), asCopy = true)
-                                }
-                                busy = false
-                                if (result.error != null) {
-                                    a.toast(result.error)
-                                } else {
-                                    a.toast("Сохранено")
-                                    a.container.library.rescan()
-                                    a.nav.pop()
-                                }
-                            }
-                        },
+                        onClick = { showSaveDialog = true },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(Icons.Rounded.ContentCut, null, Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Сохранить копию")
+                        Text("Сохранить…")
                     }
                 }
             }
         }
+    }
+
+    if (showSaveDialog && track != null) {
+        AlertDialog(
+            onDismissRequest = { if (!busy) showSaveDialog = false },
+            title = { Text("Сохранить обрезку") },
+            text = {
+                Column {
+                    Text("Название", style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = saveName,
+                        onValueChange = { saveName = it },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text("Формат", style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = outFormat == "m4a",
+                            onClick = { outFormat = "m4a" },
+                            label = { Text("M4A (AAC)") },
+                        )
+                        FilterChip(
+                            selected = outFormat == "mp3",
+                            onClick = { outFormat = "mp3" },
+                            label = { Text("MP3") },
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        if (outFormat == "mp3")
+                            "На Android файл будет AAC в контейнере M4A (расширение .m4a) — так надёжнее. Качество как у MP3 128k."
+                        else
+                            "M4A (AAC) — лучшая совместимость с обрезкой.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = c.textDim,
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showSaveDialog = false
+                        busy = true
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                FileOps.trimTrack(
+                                    ctx, track, startMs.toLong(), endMs.toLong(),
+                                    asCopy = true,
+                                    customName = saveName,
+                                    format = outFormat,
+                                )
+                            }
+                            busy = false
+                            if (result.error != null) {
+                                a.toast(result.error)
+                            } else {
+                                a.toast("Сохранено в Music/Maysk/")
+                                a.container.library.rescan()
+                                a.nav.pop()
+                            }
+                        }
+                    },
+                    enabled = saveName.isNotBlank(),
+                ) { Text("Сохранить") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showSaveDialog = false }) { Text("Отмена") }
+            },
+        )
     }
 }

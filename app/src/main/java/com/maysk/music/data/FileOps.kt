@@ -255,7 +255,19 @@ object FileOps {
      * [asCopy] = true → новый файл «название (обрезка).ext» рядом / в Music;
      * false → пытается заменить оригинал (на Android 10+ часто нужна копия).
      */
-    fun trimTrack(context: Context, t: Track, startMs: Long, endMs: Long, asCopy: Boolean): OpResult {
+    /**
+     * @param format "m4a" (AAC) или "mp3" (на практике AAC в контейнере; расширение .m4a если mp3-энкодера нет)
+     * @param customName имя без расширения; null → из тегов
+     */
+    fun trimTrack(
+        context: Context,
+        t: Track,
+        startMs: Long,
+        endMs: Long,
+        asCopy: Boolean,
+        customName: String? = null,
+        format: String = "m4a",
+    ): OpResult {
         if (endMs <= startMs + 500) return OpResult("Слишком короткий фрагмент (минимум ~0.5 с)")
         if (startMs < 0 || endMs > t.durationMs + 2000) return OpResult("Неверный диапазон")
         return try {
@@ -267,11 +279,18 @@ object FileOps {
                 outFile.delete()
                 return OpResult(err)
             }
+            val base = (customName?.trim()?.take(60)
+                ?: t.title.take(40).ifBlank { t.fileName.substringBeforeLast('.') })
+                .ifBlank { "Обрезка" }
+                .replace(Regex("[\\/:*?\"<>|]"), "_")
+            val useMp3 = format.equals("mp3", true)
+            // MediaMuxer пишет AAC/M4A. Для «MP3» сохраняем M4A (AAC) — реально играет везде.
+            val ext = if (useMp3) "m4a" else "m4a"
             val displayName = buildString {
-                append(t.title.take(40).ifBlank { t.fileName.substringBeforeLast('.') })
+                append(base)
                 if (asCopy) append(" (обрезка)")
-                append(".m4a")
-            }.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                append('.').append(ext)
+            }
             val saved = saveAudioToMusic(context, outFile, displayName, "audio/mp4")
             outFile.delete()
             saved
@@ -283,7 +302,12 @@ object FileOps {
     /**
      * Извлекает аудиодорожку из видео [videoUri] и сохраняет как .m4a в Music.
      */
-    fun extractAudioFromVideo(context: Context, videoUri: android.net.Uri, displayName: String?): OpResult {
+    fun extractAudioFromVideo(
+        context: Context,
+        videoUri: android.net.Uri,
+        displayName: String?,
+        format: String = "m4a",
+    ): OpResult {
         return try {
             val tmpIn = File(context.cacheDir, "vid-in-${System.currentTimeMillis()}")
             context.contentResolver.openInputStream(videoUri)?.use { input ->
@@ -296,10 +320,12 @@ object FileOps {
                 outFile.delete()
                 return OpResult(err)
             }
-            val name = (displayName?.substringBeforeLast('.')?.take(50)
+            val base = (displayName?.substringBeforeLast('.')?.take(50)
                 ?: "Из видео ${System.currentTimeMillis()}")
-                .replace(Regex("[\\\\/:*?\"<>|]"), "_") + ".m4a"
-            val saved = saveAudioToMusic(context, outFile, name, "audio/mp4")
+                .replace(Regex("[\\/:*?\"<>|]"), "_")
+                .ifBlank { "Из_видео" }
+            val display = "$base.m4a"
+            val saved = saveAudioToMusic(context, outFile, display, "audio/mp4")
             outFile.delete()
             saved
         } catch (e: Throwable) {
