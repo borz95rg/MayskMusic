@@ -48,7 +48,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -114,7 +113,7 @@ fun AppBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.(
                     bitmap = bmp.asImageBitmap(),
                     contentDescription = null,
                     modifier = Modifier.matchParentSize(),
-                    contentScale = ContentScale.Crop,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     alpha = 0.55f,
                 )
                 Box(Modifier.matchParentSize().background(c.bgBottom.copy(alpha = 0.45f)))
@@ -126,7 +125,7 @@ fun AppBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.(
                 model = Uri.parse(ui.customBgUri),
                 contentDescription = null,
                 modifier = Modifier.matchParentSize(),
-                contentScale = ContentScale.Crop,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                 alpha = 0.55f,
             )
             Box(Modifier.matchParentSize().background(c.bgBottom.copy(alpha = 0.45f)))
@@ -176,7 +175,7 @@ fun Artwork(model: Any?, modifier: Modifier = Modifier, corner: Dp = 12.dp, seed
             AsyncImage(
                 model = model,
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
         }
