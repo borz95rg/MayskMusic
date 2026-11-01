@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
@@ -206,6 +207,11 @@ fun HomeScreen() {
                     item {
                         QuickChip("Плейлисты", Icons.Rounded.QueueMusic, c.accent2) {
                             a.nav.selectTab(2)
+                        }
+                    }
+                    item {
+                        QuickChip("Радио", Icons.Rounded.Radio, Color(0xFF8B5CF6)) {
+                            a.nav.selectTab(3)
                         }
                     }
                 }
