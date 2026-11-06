@@ -1,5 +1,9 @@
 package com.maysk.music.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -55,12 +59,12 @@ import com.maysk.music.data.PlayerStyle
 import com.maysk.music.data.ThemePreset
 import com.maysk.music.data.VisualizerStyle
 import com.maysk.music.ui.LocalActions
-import com.maysk.design.AppBackground
-import com.maysk.design.ChoiceChipRow
-import com.maysk.design.GlassCard
-import com.maysk.design.GradientButton
-import com.maysk.design.TextInputDialog
-import com.maysk.design.TopBar
+import com.maysk.music.ui.components.AppBackground
+import com.maysk.music.ui.components.ChoiceChipRow
+import com.maysk.music.ui.components.GlassCard
+import com.maysk.music.ui.components.GradientButton
+import com.maysk.music.ui.components.TextInputDialog
+import com.maysk.music.ui.components.TopBar
 import com.maysk.music.ui.theme.AccentPalette
 import com.maysk.music.ui.theme.LocalMaysk
 import com.maysk.music.ui.theme.LocalUi
@@ -72,6 +76,22 @@ fun AppearanceScreen() {
     val c = LocalMaysk.current
     val saved by a.container.settings.state.collectAsState()
     var draft by remember { mutableStateOf(saved) }
+    val ctx = LocalContext.current
+    val pickBg = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                ctx.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            } catch (_: Exception) { }
+            val next = draft.copy(customBgUri = uri.toString(), background = BackgroundStyle.IMAGE)
+            draft = next
+            a.container.settings.update {
+                it.copy(customBgUri = next.customBgUri, background = next.background)
+            }
+        }
+    }
     var tab by remember { mutableIntStateOf(0) }
     var naming by remember { mutableStateOf(false) }
     var customThemes by remember { mutableStateOf(a.container.settings.customThemes()) }
@@ -128,7 +148,41 @@ fun AppearanceScreen() {
                     Label("Скругление: ${draft.corner} dp")
                     Slider(draft.corner.toFloat(), { draft = draft.copy(corner = it.toInt()) }, valueRange = 4f..32f)
                     Label("Фон приложения")
-                    ChoiceChipRow(BackgroundStyle.entries.map { it.title }, draft.background.ordinal, { draft = draft.copy(background = BackgroundStyle.entries[it]) })
+                    ChoiceChipRow(BackgroundStyle.entries.map { it.title }, draft.background.ordinal, {
+                        val bg = BackgroundStyle.entries[it]
+                        draft = draft.copy(background = bg)
+                        // Сразу применяем обои/фото, чтобы было видно без «Сохранить»
+                        if (bg == BackgroundStyle.WALLPAPER || bg == BackgroundStyle.IMAGE) {
+                            a.container.settings.update { s -> s.copy(background = bg, customBgUri = draft.customBgUri) }
+                        }
+                    })
+                    if (draft.background == BackgroundStyle.IMAGE) {
+                        Text(
+                            if (draft.customBgUri.isBlank()) "Выберите фото из галереи — оно станет фоном приложения"
+                            else "Фото выбрано. Можно заменить.",
+                            color = LocalMaysk.current.textDim,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            androidx.compose.material3.Button(onClick = { pickBg.launch("image/*") }) {
+                                Text("Выбрать фото")
+                            }
+                            if (draft.customBgUri.isNotBlank()) {
+                                androidx.compose.material3.TextButton(onClick = { draft = draft.copy(customBgUri = "") }) {
+                                    Text("Убрать")
+                                }
+                            }
+                        }
+                    }
+                    if (draft.background == BackgroundStyle.WALLPAPER) {
+                        Text(
+                            "Будут использованы текущие обои телефона (может не работать на некоторых оболочках).",
+                            color = LocalMaysk.current.textDim,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+                        )
+                    }
                     SwitchLine("Мягкое свечение", "Неоновое свечение кнопок и обложек", draft.glow) { draft = draft.copy(glow = it) }
                 }
                 2 -> {

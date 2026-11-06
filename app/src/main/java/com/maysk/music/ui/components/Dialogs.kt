@@ -1,6 +1,5 @@
 package com.maysk.music.ui.components
 
-import com.maysk.design.TextInputDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -62,6 +61,45 @@ import com.maysk.music.data.formatTime
 import com.maysk.music.ui.LocalActions
 import com.maysk.music.ui.Route
 import com.maysk.music.ui.theme.LocalMaysk
+
+@Composable
+fun TextInputDialog(
+    title: String,
+    initial: String = "",
+    label: String = "Название",
+    confirm: String = "Сохранить",
+    singleLine: Boolean = true,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text(label) },
+                singleLine = singleLine,
+                modifier = Modifier.fillMaxWidth().then(if (singleLine) Modifier else Modifier.heightIn(min = 160.dp, max = 320.dp)),
+            )
+        },
+        confirmButton = { TextButton(onClick = { onConfirm(text) }) { Text(confirm) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
+}
+
+@Composable
+fun ConfirmDialog(title: String, text: String, confirm: String = "Удалить", onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(text) },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(confirm, color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
+}
 
 @Composable
 fun AddToPlaylistDialog(tracks: List<Track>, onDismiss: () -> Unit) {
@@ -266,6 +304,27 @@ fun SleepTimerDialog(onDismiss: () -> Unit) {
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
     )
+}
+
+@Composable
+fun ChoiceChipRow(options: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val c = LocalMaysk.current
+    Row(modifier.horizontalScrollSafe(), verticalAlignment = Alignment.CenterVertically) {
+        options.forEachIndexed { i, label ->
+            val sel = i == selected
+            Text(
+                label,
+                color = if (sel) androidx.compose.ui.graphics.Color.White else c.textDim,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier
+                    .padding(end = 8.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(if (sel) c.accent else c.card.copy(alpha = c.glassAlpha))
+                    .clickable { onSelect(i) }
+                    .padding(horizontal = 16.dp, vertical = 9.dp),
+            )
+        }
+    }
 }
 
 @Composable

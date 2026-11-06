@@ -46,10 +46,10 @@ import com.maysk.music.data.Track
 import com.maysk.music.ui.LocalActions
 import com.maysk.music.ui.Route
 import com.maysk.music.ui.components.Artwork
-import com.maysk.design.GlassCard
-import com.maysk.design.GradientButton
+import com.maysk.music.ui.components.GlassCard
+import com.maysk.music.ui.components.GradientButton
 import com.maysk.music.ui.components.TagRepairDialog
-import com.maysk.design.TopBar
+import com.maysk.music.ui.components.TopBar
 import com.maysk.music.ui.theme.LocalMaysk
 
 /** Раздел Maysk AI: умные функции поверх вашей библиотеки. Всё необязательно, всё с подтверждением. */

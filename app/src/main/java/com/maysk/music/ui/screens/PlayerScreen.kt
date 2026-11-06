@@ -112,10 +112,11 @@ import com.maysk.music.data.Track
 import com.maysk.music.data.VisualizerStyle
 import com.maysk.music.data.formatTime
 import com.maysk.music.ui.LocalActions
+import com.maysk.music.ui.LocalStrings
 import com.maysk.music.ui.Route
 import com.maysk.music.ui.components.Artwork
 import com.maysk.music.ui.components.SleepTimerDialog
-import com.maysk.design.TextInputDialog
+import com.maysk.music.ui.components.TextInputDialog
 import com.maysk.music.ui.components.TrackDetailsDialog
 import com.maysk.music.ui.theme.LocalMaysk
 import com.maysk.music.ui.theme.LocalUi
@@ -271,6 +272,12 @@ fun PlayerScreen(onClose: () -> Unit) {
                     BottomAction(Icons.Rounded.MoreHoriz, "Ещё") { moreMenu = true }
                     DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
                         if (track != null) {
+                            DropdownMenuItem(text = { Text(LocalStrings.current.trim) }, onClick = {
+                                moreMenu = false; onClose(); a.nav.push(Route.Trim(track.id))
+                            })
+                            DropdownMenuItem(text = { Text(LocalStrings.current.editTags) }, onClick = {
+                                moreMenu = false; a.editTags(listOf(track))
+                            })
                             DropdownMenuItem(text = { Text("Добавить в плейлист") }, onClick = { moreMenu = false; a.addToPlaylist(listOf(track)) })
                             DropdownMenuItem(text = { Text("Информация о файле") }, onClick = { moreMenu = false; showDetails = true })
                         }
@@ -623,8 +630,8 @@ private fun LyricsPanel(track: Track, position: Long, modifier: Modifier, onClos
                 Text("Текст для этого трека не найден", color = c.text, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "В тегах файла текста нет. Загрузите файл .lrc (синхронизированный текст) или введите текст вручную — " +
-                        "его можно записать прямо в файл кнопкой «Сохранить».",
+                    "Загрузите файл .lrc (синхронизированный текст) или введите текст вручную. " +
+                        "Тексты из интернета не загружаются — только ваши файлы.",
                     color = c.textDim, textAlign = TextAlign.Center,
                 )
             }

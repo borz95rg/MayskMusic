@@ -49,6 +49,7 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -89,11 +90,11 @@ import com.maysk.music.ui.components.AddToPlaylistDialog
 import com.maysk.music.ui.components.BatchTagDialog
 import com.maysk.music.ui.components.MoveCopyDialog
 import com.maysk.music.ui.components.TagEditorDialog
-import com.maysk.design.AppBackground
+import com.maysk.music.ui.components.AppBackground
 import com.maysk.music.ui.components.Artwork
-import com.maysk.design.ConfirmDialog
-import com.maysk.design.GlassCard
-import com.maysk.design.GradientButton
+import com.maysk.music.ui.components.ConfirmDialog
+import com.maysk.music.ui.components.GlassCard
+import com.maysk.music.ui.components.GradientButton
 import com.maysk.music.ui.components.TrackMenuSheet
 import com.maysk.music.ui.screens.AiScreen
 import com.maysk.music.ui.screens.AlbumScreen
@@ -103,6 +104,7 @@ import com.maysk.music.ui.screens.AppearanceScreen
 import com.maysk.music.ui.screens.ArtistScreen
 import com.maysk.music.ui.screens.DuplicatesScreen
 import com.maysk.music.ui.screens.EqualizerScreen
+import com.maysk.music.ui.screens.ExtractAudioScreen
 import com.maysk.music.ui.screens.FolderManagerScreen
 import com.maysk.music.ui.screens.FolderScreen
 import com.maysk.music.ui.screens.FoldersScreen
@@ -113,10 +115,12 @@ import com.maysk.music.ui.screens.MyMusicScreen
 import com.maysk.music.ui.screens.PlayerScreen
 import com.maysk.music.ui.screens.PlaylistScreen
 import com.maysk.music.ui.screens.PlaylistsScreen
+import com.maysk.music.ui.screens.RadioScreen
 import com.maysk.music.ui.screens.SearchScreen
 import com.maysk.music.ui.screens.SettingsScreen
 import com.maysk.music.ui.screens.StatsScreen
 import com.maysk.music.ui.screens.TracksScreen
+import com.maysk.music.ui.screens.TrimScreen
 import com.maysk.music.ui.theme.LocalMaysk
 import com.maysk.music.ui.theme.MayskTheme
 import com.maysk.music.ui.theme.buildColors
@@ -167,6 +171,20 @@ private fun MainScaffold(container: AppContainer) {
     var moveTracks by remember { mutableStateOf<Pair<List<Track>, Boolean>?>(null) }
     val toastRef: (String) -> Unit = remember {
         { msg: String -> scope.launch { snackbar.currentSnackbarData?.dismiss(); snackbar.showSnackbar(msg) }; Unit }
+    }
+
+    // Тост при появлении новых треков (скачивание / импорт)
+    val libState by container.library.library.collectAsState()
+    var prevTrackCount by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(libState.tracks.size, libState.loaded) {
+        if (!libState.loaded) return@LaunchedEffect
+        val n = libState.tracks.size
+        val prev = prevTrackCount
+        if (prev != null && n > prev) {
+            val added = n - prev
+            toastRef(if (added == 1) "Добавлен 1 новый трек" else "Добавлено треков: $added")
+        }
+        prevTrackCount = n
     }
 
     val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
@@ -370,6 +388,7 @@ private fun RouteContent(route: Route) {
         is Route.LibraryTab -> TracksScreen(initialTab = route.tab, showBack = true)
         Route.Folders -> FoldersScreen()
         Route.Playlists -> PlaylistsScreen()
+        Route.Radio -> RadioScreen()
         Route.MyMusic -> MyMusicScreen()
         is Route.AlbumR -> AlbumScreen(route.id)
         is Route.ArtistR -> ArtistScreen(route.name)
@@ -387,18 +406,21 @@ private fun RouteContent(route: Route) {
         Route.Ai -> AiScreen()
         is Route.Similar -> SimilarScreen(route.trackId)
         is Route.Mood -> MoodScreen(route.kind)
+        is Route.Trim -> TrimScreen(initialTrackId = route.trackId)
+        Route.ExtractAudio -> ExtractAudioScreen()
     }
 }
 
 @Composable
 private fun BottomNav(nav: Nav) {
     val c = LocalMaysk.current
+    val s = LocalStrings.current
     val items = listOf(
-        Triple("Главная", Icons.Rounded.Home, 0),
-        Triple("Треки", Icons.Rounded.MusicNote, 1),
-        Triple("Папки", Icons.Rounded.Folder, 2),
-        Triple("Плейлисты", Icons.Rounded.QueueMusic, 3),
-        Triple("Моя музыка", Icons.Rounded.Person, 4),
+        Triple(s.home, Icons.Rounded.Home, 0),
+        Triple(s.tracks, Icons.Rounded.MusicNote, 1),
+        Triple(s.playlists, Icons.Rounded.QueueMusic, 2),
+        Triple(s.radio, Icons.Rounded.Radio, 3),
+        Triple(s.myMusic, Icons.Rounded.Person, 4),
     )
     Row(
         Modifier

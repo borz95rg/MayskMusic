@@ -48,10 +48,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.maysk.music.playback.AudioEffects
 import com.maysk.music.ui.LocalActions
-import com.maysk.design.GlassCard
-import com.maysk.design.GradientButton
-import com.maysk.design.TextInputDialog
-import com.maysk.design.TopBar
+import com.maysk.music.ui.components.GlassCard
+import com.maysk.music.ui.components.GradientButton
+import com.maysk.music.ui.components.TextInputDialog
+import com.maysk.music.ui.components.TopBar
 import com.maysk.music.ui.theme.LocalMaysk
 
 @Composable

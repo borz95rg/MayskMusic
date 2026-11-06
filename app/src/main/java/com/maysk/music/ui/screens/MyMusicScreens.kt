@@ -32,9 +32,11 @@ import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Headset
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.MusicNote
@@ -44,6 +46,7 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.TrendingUp
+import androidx.compose.material.icons.rounded.VideoFile
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -71,14 +74,14 @@ import com.maysk.music.ui.LocalActions
 import com.maysk.music.ui.MixKind
 import com.maysk.music.ui.Route
 import com.maysk.music.ui.components.Artwork
-import com.maysk.design.ChoiceChipRow
-import com.maysk.design.ConfirmDialog
-import com.maysk.design.EmptyState
-import com.maysk.design.GlassCard
+import com.maysk.music.ui.components.ChoiceChipRow
+import com.maysk.music.ui.components.ConfirmDialog
+import com.maysk.music.ui.components.EmptyState
+import com.maysk.music.ui.components.GlassCard
 import com.maysk.music.ui.components.IconTile
-import com.maysk.design.SectionHeader
+import com.maysk.music.ui.components.SectionHeader
 import com.maysk.music.ui.components.SleepTimerDialog
-import com.maysk.design.TopBar
+import com.maysk.music.ui.components.TopBar
 import com.maysk.music.ui.theme.LocalMaysk
 import com.maysk.music.ui.theme.LocalUi
 import java.util.Calendar
@@ -103,9 +106,12 @@ fun MyMusicScreen() {
         Tile("История", "${history.size}", Icons.Rounded.History, c.accent2) { a.nav.push(Route.MixR(MixKind.HISTORY)) },
         Tile("Часто слушаю", null, Icons.Rounded.TrendingUp, c.accent) { a.nav.push(Route.MixR(MixKind.FREQUENT)) },
         Tile("Новые", null, Icons.Rounded.NewReleases, Color(0xFF14B8A6)) { a.nav.push(Route.MixR(MixKind.RECENT_ADDED)) },
+        Tile("Папки", "${lib.folders.size}", Icons.Rounded.Folder, c.accent) { a.nav.push(Route.Folders) },
         Tile("Альбомы", "${lib.albums.size}", Icons.Rounded.Album, c.accent) { a.nav.push(Route.LibraryTab(1)) },
         Tile("Исполнители", "${lib.artists.size}", Icons.Rounded.Person, c.accent2) { a.nav.push(Route.LibraryTab(2)) },
         Tile("Жанры", "${lib.genres.size}", Icons.Rounded.Category, Color(0xFFF97316)) { a.nav.push(Route.LibraryTab(3)) },
+        Tile("Обрезать трек", null, Icons.Rounded.ContentCut, Color(0xFFEC4899)) { a.nav.push(Route.Trim()) },
+        Tile("Из видео", null, Icons.Rounded.VideoFile, Color(0xFF8B5CF6)) { a.nav.push(Route.ExtractAudio) },
         Tile("Статистика", null, Icons.Rounded.BarChart, c.accent3) { a.nav.push(Route.Stats) },
         Tile("Эквалайзер", null, Icons.Rounded.Equalizer, c.accent) { a.nav.push(Route.Equalizer) },
         Tile("Таймер сна", if (sleep.active) "включён" else null, Icons.Rounded.Timer, c.accent2) { timer = true },
@@ -235,7 +241,7 @@ fun StatsScreen() {
         }
     }
     if (confirmClear) {
-        ConfirmDialog("Очистить историю?", "История прослушивания и статистика будут удалены.", "Очистить", onDismiss = { confirmClear = false }) {
+        ConfirmDialog("Очистить историю?", "История прослушивания и статистика будут удалены.", "Очистить", { confirmClear = false }) {
             a.container.userData.clearHistory(); confirmClear = false
         }
     }

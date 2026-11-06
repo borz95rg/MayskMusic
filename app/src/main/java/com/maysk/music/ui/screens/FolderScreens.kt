@@ -61,12 +61,12 @@ import com.maysk.music.ui.LocalActions
 import com.maysk.music.ui.MixKind
 import com.maysk.music.ui.Route
 import com.maysk.music.ui.components.Artwork
-import com.maysk.design.EmptyState
-import com.maysk.design.GlassCard
+import com.maysk.music.ui.components.EmptyState
+import com.maysk.music.ui.components.GlassCard
 import com.maysk.music.ui.components.IconTile
-import com.maysk.design.SectionHeader
-import com.maysk.design.TextInputDialog
-import com.maysk.design.TopBar
+import com.maysk.music.ui.components.SectionHeader
+import com.maysk.music.ui.components.TextInputDialog
+import com.maysk.music.ui.components.TopBar
 import com.maysk.music.ui.theme.LocalMaysk
 import com.maysk.music.ui.theme.LocalUi
 import java.io.File
@@ -84,7 +84,7 @@ fun FoldersScreen() {
     val cols = if (LocalUi.current.simpleMode) 1 else 2
 
     Column(Modifier.fillMaxSize()) {
-        TopBar("Папки") {
+        TopBar("Папки", onBack = { a.nav.pop() }) {
             IconButton(onClick = { a.nav.push(Route.FolderManager) }) { Icon(Icons.Rounded.Tune, "Управление папками", tint = c.text) }
         }
         LazyVerticalGrid(
