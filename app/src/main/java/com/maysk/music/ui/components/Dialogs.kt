@@ -1,5 +1,6 @@
 package com.maysk.music.ui.components
 
+import com.maysk.design.TextInputDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -60,45 +62,6 @@ import com.maysk.music.data.formatTime
 import com.maysk.music.ui.LocalActions
 import com.maysk.music.ui.Route
 import com.maysk.music.ui.theme.LocalMaysk
-
-@Composable
-fun TextInputDialog(
-    title: String,
-    initial: String = "",
-    label: String = "Название",
-    confirm: String = "Сохранить",
-    singleLine: Boolean = true,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
-) {
-    var text by remember { mutableStateOf(initial) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                label = { Text(label) },
-                singleLine = singleLine,
-                modifier = Modifier.fillMaxWidth().then(if (singleLine) Modifier else Modifier.heightIn(min = 160.dp, max = 320.dp)),
-            )
-        },
-        confirmButton = { TextButton(onClick = { onConfirm(text) }) { Text(confirm) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
-    )
-}
-
-@Composable
-fun ConfirmDialog(title: String, text: String, confirm: String = "Удалить", onDismiss: () -> Unit, onConfirm: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(text) },
-        confirmButton = { TextButton(onClick = onConfirm) { Text(confirm, color = MaterialTheme.colorScheme.error) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
-    )
-}
 
 @Composable
 fun AddToPlaylistDialog(tracks: List<Track>, onDismiss: () -> Unit) {
@@ -154,6 +117,7 @@ private fun DialogRow(icon: ImageVector, text: String, onClick: () -> Unit) {
 fun TrackMenuSheet(tracks: List<Track>, onDismiss: () -> Unit) {
     val actions = LocalActions.current
     val c = LocalMaysk.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     val favorites by actions.container.userData.favorites.collectAsState()
     var details by remember { mutableStateOf(false) }
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -201,6 +165,12 @@ fun TrackMenuSheet(tracks: List<Track>, onDismiss: () -> Unit) {
                 SheetItem(Icons.Rounded.Album, "Альбом: ${single.album}") { onDismiss(); actions.nav.push(Route.AlbumR(single.albumId)) }
                 SheetItem(Icons.Rounded.Person, "Исполнитель: ${single.artist}") { onDismiss(); actions.nav.push(Route.ArtistR(single.artist)) }
                 SheetItem(Icons.Rounded.Info, "Информация о файле") { details = true }
+                SheetItem(Icons.Rounded.FolderOpen, "Показать в папке") {
+                    onDismiss()
+                    if (!com.maysk.design.MayskEcosystem.showInFiles(context, single.path)) {
+                        actions.toast("Установите Maysk Files из экосистемы Maysk")
+                    }
+                }
             }
             SheetItem(Icons.Rounded.Delete, "Удалить с устройства", danger = true) { onDismiss(); actions.delete(tracks) }
         }
@@ -296,27 +266,6 @@ fun SleepTimerDialog(onDismiss: () -> Unit) {
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
     )
-}
-
-@Composable
-fun ChoiceChipRow(options: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
-    val c = LocalMaysk.current
-    Row(modifier.horizontalScrollSafe(), verticalAlignment = Alignment.CenterVertically) {
-        options.forEachIndexed { i, label ->
-            val sel = i == selected
-            Text(
-                label,
-                color = if (sel) androidx.compose.ui.graphics.Color.White else c.textDim,
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier
-                    .padding(end = 8.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(if (sel) c.accent else c.card.copy(alpha = c.glassAlpha))
-                    .clickable { onSelect(i) }
-                    .padding(horizontal = 16.dp, vertical = 9.dp),
-            )
-        }
-    }
 }
 
 @Composable

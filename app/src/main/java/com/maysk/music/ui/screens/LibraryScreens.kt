@@ -68,12 +68,12 @@ import com.maysk.music.ui.LocalActions
 import com.maysk.music.ui.MixKind
 import com.maysk.music.ui.Route
 import com.maysk.music.ui.components.Artwork
-import com.maysk.music.ui.components.ChoiceChipRow
-import com.maysk.music.ui.components.EmptyState
-import com.maysk.music.ui.components.GlassCard
-import com.maysk.music.ui.components.GradientButton
-import com.maysk.music.ui.components.SectionHeader
-import com.maysk.music.ui.components.TopBar
+import com.maysk.design.ChoiceChipRow
+import com.maysk.design.EmptyState
+import com.maysk.design.GlassCard
+import com.maysk.design.GradientButton
+import com.maysk.design.SectionHeader
+import com.maysk.design.TopBar
 import com.maysk.music.ui.components.TrackRow
 import com.maysk.music.ui.mixTracks
 import com.maysk.music.ui.theme.LocalMaysk
@@ -386,6 +386,7 @@ fun AlbumScreen(id: Long) {
     val album = lib.albums.firstOrNull { it.id == id }
     if (album == null) { MissingScreen(); return }
     val covers by a.container.userData.albumCovers.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var menu by remember { mutableStateOf(false) }
     var searching by remember { mutableStateOf(false) }
     TrackListScreen(
@@ -420,6 +421,21 @@ fun AlbumScreen(id: Long) {
                         menu = false
                         a.container.userData.setAlbumCover(album.id, null)
                         a.container.library.applyFilters()
+                    })
+                    val coverPath = covers[album.id]
+                    if (coverPath != null) DropdownMenuItem(text = { Text("Встроить обложку в файлы") }, onClick = {
+                        menu = false
+                        val bytes = runCatching { java.io.File(coverPath).readBytes() }.getOrNull()
+                        if (bytes == null) a.toast("Файл обложки не найден")
+                        else a.fileJob(album.tracks.filter { com.maysk.music.data.FileOps.canEditTags(it) }, true, "Обложка записана в файлы альбома") { t ->
+                            com.maysk.music.data.FileOps.writeCoverOp(context, t, bytes)
+                        }
+                    })
+                    DropdownMenuItem(text = { Text("Удалить встроенную обложку") }, onClick = {
+                        menu = false
+                        a.fileJob(album.tracks.filter { com.maysk.music.data.FileOps.canEditTags(it) }, true, "Встроенная обложка удалена") { t ->
+                            com.maysk.music.data.FileOps.removeCoverOp(context, t)
+                        }
                     })
                     DropdownMenuItem(text = { Text("Редактировать теги альбома") }, onClick = { menu = false; a.editTags(album.tracks) })
                 }

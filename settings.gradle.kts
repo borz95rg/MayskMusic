@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "MayskMusic"
-include(":app")
+include(":app", ":design")

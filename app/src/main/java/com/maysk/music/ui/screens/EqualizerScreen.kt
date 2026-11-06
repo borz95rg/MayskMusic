@@ -48,10 +48,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.maysk.music.playback.AudioEffects
 import com.maysk.music.ui.LocalActions
-import com.maysk.music.ui.components.GlassCard
-import com.maysk.music.ui.components.GradientButton
-import com.maysk.music.ui.components.TextInputDialog
-import com.maysk.music.ui.components.TopBar
+import com.maysk.design.GlassCard
+import com.maysk.design.GradientButton
+import com.maysk.design.TextInputDialog
+import com.maysk.design.TopBar
 import com.maysk.music.ui.theme.LocalMaysk
 
 @Composable
@@ -221,7 +221,7 @@ private fun BalanceFadeCard() {
             }
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Плавный переход между треками", color = c.text, modifier = Modifier.weight(1f))
+                Text("Crossfade (наложение треков)", color = c.text, modifier = Modifier.weight(1f))
                 Text(if (fade < 1f) "Выкл" else "${fade.toInt()} сек", color = c.textDim, style = MaterialTheme.typography.bodySmall)
             }
             Slider(
@@ -233,7 +233,7 @@ private fun BalanceFadeCard() {
                 colors = SliderDefaults.colors(thumbColor = c.accent, activeTrackColor = c.accent),
             )
             Text(
-                "Конец трека плавно затихает, следующий плавно нарастает. Баланс работает для стерео-записей.",
+                "Настоящий crossfade: треки звучат одновременно — конец песни затихает, а следующая уже нарастает. Баланс работает для стерео-записей.",
                 color = c.textDim, style = MaterialTheme.typography.bodySmall,
             )
         }

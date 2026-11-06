@@ -7,12 +7,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 
-enum class AppLang(val title: String) {
-    RU("Русский"),
-    KK("Қазақша"),
-    EN("English"),
-}
-
 enum class ThemePreset(val title: String, val subtitle: String) {
     AURORA("Aurora Glass", "Мягкие градиенты и стекло"),
     AMOLED("AMOLED Ultra", "Чёрный фон, минимализм"),
@@ -21,20 +15,11 @@ enum class ThemePreset(val title: String, val subtitle: String) {
     MINIMAL("Modern Minimal", "Простой и чистый"),
     CLASSIC("Classic Dark", "Классический тёмный"),
     LIGHT("Light Modern", "Светлая тема"),
-    OCEAN("Ocean Blue", "Глубокий синий"),
-    FOREST("Forest", "Зелёный природный"),
-    SUNSET("Sunset", "Тёплый закат"),
-    ROSE("Rose Pink", "Нежный розовый"),
-    CYBER("Cyberpunk", "Футуризм и неон"),
-    SAND("Desert Sand", "Песочный светлый"),
-    MIDNIGHT("Midnight", "Глубокая ночь"),
-    EMERALD("Emerald", "Изумрудный"),
-    LAVENDER("Lavender", "Лавандовый светлый"),
 }
 
 enum class PlayerStyle(val title: String) { COVER("Обложка"), VINYL("Винил"), MINIMAL("Минимал") }
 enum class MiniPlayerStyle(val title: String) { GLASS("Стекло"), COMPACT("Компакт") }
-enum class BackgroundStyle(val title: String) { GRADIENT("Градиент"), AURORA("Аврора"), SOLID("Сплошной"), WALLPAPER("Обои телефона"), IMAGE("Фото из галереи") }
+enum class BackgroundStyle(val title: String) { GRADIENT("Градиент"), AURORA("Аврора"), SOLID("Сплошной") }
 enum class VisualizerStyle(val title: String) { OFF("Выкл"), SPECTRUM("Спектр"), WAVES("Волны"), CIRCLE("Неоновый круг") }
 
 data class AppSettings(
@@ -64,9 +49,6 @@ data class AppSettings(
     val crossfadeSec: Int = 0,
     /** Баланс: -1 = только левый, 0 = центр, 1 = только правый. */
     val balance: Float = 0f,
-    val language: AppLang = AppLang.RU,
-    /** URI фонового изображения (галерея) или пусто */
-    val customBgUri: String = "",
 ) {
     val animationsEnabled: Boolean get() = animSpeed > 0f
 }
@@ -156,8 +138,6 @@ class SettingsStore(context: Context) {
             put("customUpdateRepo", s.customUpdateRepo)
             put("crossfadeSec", s.crossfadeSec)
             put("balance", s.balance.toDouble())
-            put("language", s.language.name)
-            put("customBgUri", s.customBgUri)
         }
 
         fun fromJson(o: JSONObject): AppSettings {
@@ -188,8 +168,6 @@ class SettingsStore(context: Context) {
                 customUpdateRepo = o.optString("customUpdateRepo", d.customUpdateRepo),
                 crossfadeSec = o.optInt("crossfadeSec", d.crossfadeSec),
                 balance = o.optDouble("balance", d.balance.toDouble()).toFloat(),
-                language = enumOr(o.optString("language"), d.language),
-                customBgUri = o.optString("customBgUri", d.customBgUri),
             )
         }
 

@@ -61,6 +61,7 @@ import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.DropdownMenu
@@ -111,11 +112,10 @@ import com.maysk.music.data.Track
 import com.maysk.music.data.VisualizerStyle
 import com.maysk.music.data.formatTime
 import com.maysk.music.ui.LocalActions
-import com.maysk.music.ui.LocalStrings
 import com.maysk.music.ui.Route
 import com.maysk.music.ui.components.Artwork
 import com.maysk.music.ui.components.SleepTimerDialog
-import com.maysk.music.ui.components.TextInputDialog
+import com.maysk.design.TextInputDialog
 import com.maysk.music.ui.components.TrackDetailsDialog
 import com.maysk.music.ui.theme.LocalMaysk
 import com.maysk.music.ui.theme.LocalUi
@@ -271,12 +271,6 @@ fun PlayerScreen(onClose: () -> Unit) {
                     BottomAction(Icons.Rounded.MoreHoriz, "Ещё") { moreMenu = true }
                     DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
                         if (track != null) {
-                            DropdownMenuItem(text = { Text(LocalStrings.current.trim) }, onClick = {
-                                moreMenu = false; onClose(); a.nav.push(Route.Trim(track.id))
-                            })
-                            DropdownMenuItem(text = { Text(LocalStrings.current.editTags) }, onClick = {
-                                moreMenu = false; a.editTags(listOf(track))
-                            })
                             DropdownMenuItem(text = { Text("Добавить в плейлист") }, onClick = { moreMenu = false; a.addToPlaylist(listOf(track)) })
                             DropdownMenuItem(text = { Text("Информация о файле") }, onClick = { moreMenu = false; showDetails = true })
                         }
@@ -589,6 +583,8 @@ private fun LyricsPanel(track: Track, position: Long, modifier: Modifier, onClos
                     val f = File(track.path.substringBeforeLast('.') + ".lrc")
                     if (f.canRead()) f.readText() else null
                 } catch (e: Exception) { null }
+                    // Нет .lrc — ищем текст во встроенных тегах файла (USLT / LYRICS / ©lyr)
+                    ?: com.maysk.music.data.FileOps.readLyrics(context, track)
             }
             if (!text.isNullOrBlank()) store.setLyrics(track.id, text)
         }
@@ -616,6 +612,9 @@ private fun LyricsPanel(track: Track, position: Long, modifier: Modifier, onClos
             IconButton(onClick = { fontSize = (fontSize + 2f).coerceAtMost(36f) }) { Icon(Icons.Rounded.Add, "Больше", tint = c.text) }
             IconButton(onClick = { picker.launch(arrayOf("*/*")) }) { Icon(Icons.Rounded.FolderOpen, "Загрузить .lrc", tint = c.text) }
             IconButton(onClick = { editing = true }) { Icon(Icons.Rounded.Edit, "Ввести текст", tint = c.text) }
+            if (raw != null && com.maysk.music.data.FileOps.canEditTags(track)) IconButton(onClick = {
+                a.fileJob(listOf(track), true, "Текст записан в теги файла") { t -> com.maysk.music.data.FileOps.writeLyricsOp(context, t, raw) }
+            }) { Icon(Icons.Rounded.Save, "Записать текст в файл", tint = c.text) }
             if (raw != null) IconButton(onClick = { store.setLyrics(track.id, null) }) { Icon(Icons.Rounded.Delete, "Удалить текст", tint = c.text) }
             IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, "Закрыть", tint = c.text) }
         }
@@ -624,8 +623,8 @@ private fun LyricsPanel(track: Track, position: Long, modifier: Modifier, onClos
                 Text("Текст для этого трека не найден", color = c.text, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Загрузите файл .lrc (синхронизированный текст) или введите текст вручную. " +
-                        "Тексты из интернета не загружаются — только ваши файлы.",
+                    "В тегах файла текста нет. Загрузите файл .lrc (синхронизированный текст) или введите текст вручную — " +
+                        "его можно записать прямо в файл кнопкой «Сохранить».",
                     color = c.textDim, textAlign = TextAlign.Center,
                 )
             }

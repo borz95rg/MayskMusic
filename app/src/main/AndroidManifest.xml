@@ -3,6 +3,7 @@
 
     <!-- Голосовой ввод (распознавание речи системой) -->
     <queries>
+        <package android:name="com.maysk.files" />
         <intent>
             <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
         </intent>
@@ -35,8 +36,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Maysk"
-        android:usesCleartextTraffic="true">
+        android:theme="@style/Theme.Maysk">
 
         <!-- Android Auto: приложение — медиаплеер -->
         <meta-data

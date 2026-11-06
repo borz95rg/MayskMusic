@@ -49,7 +49,7 @@ class PlaybackService : MediaLibraryService() {
     private var session: MediaLibrarySession? = null
     private lateinit var container: AppContainer
     private val balance = BalanceProcessor()
-    private var fadeJob: Job? = null
+    private var crossfader: Crossfader? = null
     private var settingsJob: Job? = null
 
     override fun onCreate() {
@@ -91,7 +91,12 @@ class PlaybackService : MediaLibraryService() {
         settingsJob = container.scope.launch {
             container.settings.state.collect { balance.balance = it.balance }
         }
-        startFadeLoop(player)
+        // Настоящий crossfade: два плеера звучат одновременно на стыке треков.
+        crossfader = Crossfader(
+            this, container.scope, player, container.audioSessionId,
+            fadeSeconds = { container.settings.current.crossfadeSec },
+            balance = { container.settings.current.balance },
+        ).also { it.start() }
 
         val openApp = PendingIntent.getActivity(
             this, 0,
@@ -108,38 +113,6 @@ class PlaybackService : MediaLibraryService() {
         val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_AUDIO
         else Manifest.permission.READ_EXTERNAL_STORAGE
         return ContextCompat.checkSelfPermission(this, perm) == PackageManager.PERMISSION_GRANTED
-    }
-
-    /**
-     * Плавный переход: громкость плавно растёт в начале трека и плавно затухает в конце.
-     * Длительность задаётся в настройках эквалайзера (0 — выключено).
-     */
-    private fun startFadeLoop(player: ExoPlayer) {
-        fadeJob?.cancel()
-        fadeJob = container.scope.launch {
-            while (isActive) {
-                val fadeMs = container.settings.current.crossfadeSec * 1000L
-                if (fadeMs <= 0L) {
-                    if (player.volume != 1f) player.volume = 1f
-                    delay(500)
-                    continue
-                }
-                if (player.isPlaying) {
-                    val pos = player.currentPosition
-                    val dur = player.duration
-                    var vol = 1f
-                    if (dur != C.TIME_UNSET && dur > fadeMs * 3) {
-                        val fadeIn = (pos.toFloat() / fadeMs).coerceIn(0f, 1f)
-                        val fadeOut = ((dur - pos).toFloat() / fadeMs).coerceIn(0f, 1f)
-                        vol = minOf(fadeIn, fadeOut).coerceAtLeast(0.05f)
-                    }
-                    if (kotlin.math.abs(player.volume - vol) > 0.01f) player.volume = vol
-                    delay(80)
-                } else {
-                    delay(300)
-                }
-            }
-        }
     }
 
     // ------------------------------------------------------------------
@@ -295,7 +268,8 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onDestroy() {
         container.saveQueueNow()
-        fadeJob?.cancel()
+        crossfader?.release()
+        crossfader = null
         settingsJob?.cancel()
         session?.run {
             player.release()

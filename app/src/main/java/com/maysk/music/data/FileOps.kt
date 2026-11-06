@@ -7,7 +7,14 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import org.jaudiotagger.audio.AudioFileIO
+import org.jaudiotagger.audio.AudioFile
 import org.jaudiotagger.tag.FieldKey
+import org.jaudiotagger.tag.Tag
+import org.jaudiotagger.tag.flac.FlacTag
+import org.jaudiotagger.tag.images.AndroidArtwork
+import org.jaudiotagger.tag.mp4.Mp4Tag
+import org.jaudiotagger.tag.reference.PictureTypes
+import org.jaudiotagger.tag.vorbiscomment.VorbisCommentTag
 import java.io.File
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -59,7 +66,7 @@ object FileOps {
             val res = TagField.entries.associateWith { f -> runCatching { tag.getFirst(f.key) }.getOrNull().orEmpty() }
             tmp.delete()
             res.mapValues { (k, v) -> v.ifBlank { if (k == TagField.ALBUM_ARTIST) "" else fallback[k].orEmpty() } }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             fallback
         }
     }
@@ -71,29 +78,110 @@ object FileOps {
     fun writeTagsOp(context: Context, t: Track, changes: Map<TagField, String>): OpResult =
         OpResult(writeTags(context, t, changes), listOf(t.path))
 
-    fun writeTags(context: Context, t: Track, changes: Map<TagField, String>): String? {
-        if (!canEditTags(t)) return "Формат .${t.extension} не поддерживает редактирование тегов"
-        val tmp = copyToCache(context, t, "edit") ?: return "Не удалось прочитать файл"
-        return try {
-            val af = AudioFileIO.read(tmp)
-            val tag = af.tagOrCreateAndSetDefault
+    fun writeTags(context: Context, t: Track, changes: Map<TagField, String>): String? =
+        editFile(context, t) { _, tag ->
             changes.forEach { (field, value) ->
                 val v = value.trim()
                 if (v.isEmpty()) runCatching { tag.deleteField(field.key) }
                 else tag.setField(field.key, v)
             }
+        }
+
+    /** Общая схема изменения файла: копия во временную папку → правка → запись обратно через MediaStore. */
+    private fun editFile(context: Context, t: Track, edit: (AudioFile, Tag) -> Unit): String? {
+        if (!canEditTags(t)) return "Формат .${t.extension} не поддерживает редактирование тегов"
+        val tmp = copyToCache(context, t, "edit") ?: return "Не удалось прочитать файл"
+        return try {
+            val af = AudioFileIO.read(tmp)
+            val tag = af.tagOrCreateAndSetDefault
+            edit(af, tag)
             af.commit()
             val out = context.contentResolver.openOutputStream(t.uri, "wt") ?: return "Нет доступа к файлу"
             out.use { o -> tmp.inputStream().use { it.copyTo(o) } }
             null
         } catch (e: SecurityException) {
             "Нет разрешения на изменение файла"
-        } catch (e: Exception) {
-            "Ошибка записи тегов: ${e.message ?: e.javaClass.simpleName}"
+        } catch (e: Throwable) {
+            "Ошибка записи: ${e.message ?: e.javaClass.simpleName}"
         } finally {
             tmp.delete()
         }
     }
+
+    // ------------------------------------------------------------- Обложки в файле
+
+    private fun imageMime(b: ByteArray): String = when {
+        b.size > 8 && b[0] == 0x89.toByte() && b[1] == 'P'.code.toByte() -> "image/png"
+        b.size > 12 && b[0] == 'R'.code.toByte() && b[8] == 'W'.code.toByte() -> "image/webp"
+        else -> "image/jpeg"
+    }
+
+    /** Сжимает картинку до 800×800 JPEG — так обложка не раздувает файл и читается любым плеером. */
+    private fun normalizeCover(bytes: ByteArray): ByteArray {
+        return try {
+            val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return bytes
+            val max = 800
+            val scale = minOf(1f, max.toFloat() / maxOf(bmp.width, bmp.height))
+            val scaled = if (scale < 1f) android.graphics.Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true) else bmp
+            val out = java.io.ByteArrayOutputStream()
+            scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+            out.toByteArray()
+        } catch (e: Throwable) { bytes }
+    }
+
+    /** Встраивает обложку прямо в аудиофайл (MP3, FLAC, M4A, OGG/Opus и др.). */
+    fun writeCover(context: Context, t: Track, imageBytes: ByteArray): String? {
+        val data = normalizeCover(imageBytes)
+        val mime = imageMime(data)
+        return editFile(context, t) { _, tag ->
+            runCatching { tag.deleteArtworkField() }
+            when (tag) {
+                is VorbisCommentTag -> tag.setArtworkField(data, mime)
+                is FlacTag -> tag.setField(tag.createArtworkField(data, PictureTypes.DEFAULT_ID, mime, "", 0, 0, 24, 0))
+                is Mp4Tag -> tag.setField(tag.createArtworkField(data))
+                else -> {
+                    val art = AndroidArtwork()
+                    art.binaryData = data
+                    art.mimeType = mime
+                    art.pictureType = PictureTypes.DEFAULT_ID
+                    art.description = ""
+                    tag.setField(art)
+                }
+            }
+        }
+    }
+
+    fun writeCoverOp(context: Context, t: Track, imageBytes: ByteArray): OpResult =
+        OpResult(writeCover(context, t, imageBytes), listOf(t.path))
+
+    /** Удаляет встроенную обложку. */
+    fun removeCoverOp(context: Context, t: Track): OpResult =
+        OpResult(editFile(context, t) { _, tag -> tag.deleteArtworkField() }, listOf(t.path))
+
+    /** Читает встроенную обложку файла (или null). */
+    fun readCover(context: Context, t: Track): ByteArray? = try {
+        val tmp = copyToCache(context, t, "art")
+        val res = tmp?.let { f -> runCatching { AudioFileIO.read(f).tag?.firstArtwork?.binaryData }.getOrNull() }
+        tmp?.delete()
+        res
+    } catch (e: Throwable) { null }
+
+    // ------------------------------------------------------------- Тексты песен в тегах
+
+    /** Текст песни из тегов (USLT в MP3, LYRICS во FLAC/OGG, ©lyr в M4A). */
+    fun readLyrics(context: Context, t: Track): String? {
+        if (!canEditTags(t)) return null
+        val tmp = copyToCache(context, t, "lyr") ?: return null
+        return try {
+            AudioFileIO.read(tmp).tag?.let { tag -> runCatching { tag.getFirst(FieldKey.LYRICS) }.getOrNull() }?.takeIf { it.isNotBlank() }
+        } catch (e: Throwable) { null } finally { tmp.delete() }
+    }
+
+    /** Записывает текст песни в теги файла (пустой текст — удаляет). */
+    fun writeLyricsOp(context: Context, t: Track, text: String): OpResult =
+        OpResult(editFile(context, t) { _, tag ->
+            if (text.isBlank()) runCatching { tag.deleteField(FieldKey.LYRICS) } else tag.setField(FieldKey.LYRICS, text.trim())
+        }, listOf(t.path))
 
     private fun copyToCache(context: Context, t: Track, prefix: String): File? {
         return try {
@@ -101,7 +189,7 @@ object FileOps {
             val f = File(dir, "$prefix-${t.id}.${t.extension.ifEmpty { "mp3" }}")
             val copied = context.contentResolver.openInputStream(t.uri)?.use { input -> f.outputStream().use { input.copyTo(it) } }
             if (copied == null) null else f
-        } catch (e: Exception) { null }
+        } catch (e: Throwable) { null }
     }
 
     /** Обновить запись в MediaStore после изменения файла. */
@@ -163,7 +251,7 @@ object FileOps {
             }
         } catch (e: SecurityException) {
             OpResult("Нет разрешения на изменение файла")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             OpResult("Ошибка: ${e.message ?: e.javaClass.simpleName}")
         }
     }
@@ -186,7 +274,7 @@ object FileOps {
                     val out = cr.openOutputStream(newUri) ?: throw IllegalStateException("нет доступа")
                     out.use { o -> cr.openInputStream(t.uri)?.use { it.copyTo(o) } ?: throw IllegalStateException("файл недоступен") }
                     cr.update(newUri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
                     runCatching { cr.delete(newUri, null, null) }
                     throw e
                 }
@@ -199,7 +287,7 @@ object FileOps {
             }
         } catch (e: SecurityException) {
             OpResult("Нет разрешения на запись")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             OpResult("Ошибка копирования: ${e.message ?: e.javaClass.simpleName}")
         }
     }
@@ -244,395 +332,5 @@ object FileOps {
         val titleIsFilename = t.title == t.fileName.substringBeforeLast('.')
         if (!missingArtist && !titleIsFilename) return@mapNotNull null
         guessFromFilename(t)?.takeIf { g -> !(g.artist == t.artist && g.title == t.title) }
-    }
-
-    // ------------------------------------------------------------------
-    // Обрезка и извлечение аудио
-    // ------------------------------------------------------------------
-
-    /**
-     * Обрезает трек [startMs]..[endMs].
-     * [asCopy] = true → новый файл «название (обрезка).ext» рядом / в Music;
-     * false → пытается заменить оригинал (на Android 10+ часто нужна копия).
-     */
-    /**
-     * @param format "m4a" (AAC) или "mp3" (на практике AAC в контейнере; расширение .m4a если mp3-энкодера нет)
-     * @param customName имя без расширения; null → из тегов
-     */
-    fun trimTrack(
-        context: Context,
-        t: Track,
-        startMs: Long,
-        endMs: Long,
-        asCopy: Boolean,
-        customName: String? = null,
-        format: String = "m4a",
-    ): OpResult {
-        trimRangeError(startMs, endMs, t.durationMs)?.let { return OpResult(it) }
-        return try {
-            val tmpIn = copyToCache(context, t, "trim-in") ?: return OpResult("Не удалось прочитать файл")
-            val base = safeFileName(
-                customName?.takeIf { it.isNotBlank() } ?: t.title.take(40).ifBlank { t.fileName.substringBeforeLast('.') },
-                fallback = "Обрезка",
-            )
-            val mp3 = format == "mp3"
-            val ext = if (mp3) "mp3" else "m4a"
-            val displayName = if (asCopy) "$base (обрезка).$ext" else "$base.$ext"
-            try {
-                saveProcessed(context, "trim-out", displayName, ext, if (mp3) "audio/mpeg" else "audio/mp4") { out ->
-                    if (mp3) encodeMp3(tmpIn, out, startMs, endMs) else cutAudioFile(tmpIn, out, startMs, endMs)
-                }
-            } finally {
-                tmpIn.delete()
-            }
-        } catch (e: Exception) {
-            OpResult("Ошибка обрезки: ${e.message ?: e.javaClass.simpleName}")
-        }
-    }
-
-    /**
-     * Общая схема: создать временный .m4a, заполнить его через [produce] (вернёт текст ошибки или null),
-     * сохранить в Music/Maysk и удалить временный файл.
-     */
-    private fun saveProcessed(
-        context: Context,
-        prefix: String,
-        displayName: String,
-        ext: String = "m4a",
-        mime: String = "audio/mp4",
-        produce: (File) -> String?,
-    ): OpResult {
-        val out = File(context.cacheDir, "$prefix-${System.currentTimeMillis()}.$ext")
-        return try {
-            val err = produce(out)
-            if (err != null) OpResult(err) else saveAudioToMusic(context, out, displayName, mime)
-        } finally {
-            out.delete()
-        }
-    }
-
-    /**
-     * Извлекает аудиодорожку из видео [videoUri] и сохраняет как .m4a в Music.
-     */
-    fun extractAudioFromVideo(
-        context: Context,
-        videoUri: android.net.Uri,
-        displayName: String?,
-        format: String = "m4a",
-    ): OpResult {
-        return try {
-            val tmpIn = File(context.cacheDir, "vid-in-${System.currentTimeMillis()}")
-            try {
-                context.contentResolver.openInputStream(videoUri)?.use { input ->
-                    tmpIn.outputStream().use { input.copyTo(it) }
-                } ?: return OpResult("Не удалось открыть видео")
-                val base = safeFileName(
-                    displayName?.substringBeforeLast('.'),
-                    fallback = "Из видео ${System.currentTimeMillis()}",
-                    maxLength = 50,
-                )
-                if (format == "mp3") {
-                    saveProcessed(context, "vid-out", "$base.mp3", "mp3", "audio/mpeg") { out -> encodeMp3(tmpIn, out) }
-                } else {
-                    saveProcessed(context, "vid-out", "$base.m4a") { out -> extractAudioTrack(tmpIn, out) }
-                }
-            } finally {
-                tmpIn.delete()
-            }
-        } catch (e: Exception) {
-            OpResult("Ошибка извлечения: ${e.message ?: e.javaClass.simpleName}")
-        }
-    }
-
-    private fun saveAudioToMusic(context: Context, src: File, displayName: String, mime: String): OpResult {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val cr = context.contentResolver
-                val values = ContentValues().apply {
-                    put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
-                    put(MediaStore.MediaColumns.MIME_TYPE, mime)
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, "Music/Maysk/")
-                    put(MediaStore.MediaColumns.IS_PENDING, 1)
-                }
-                val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-                val uri = cr.insert(collection, values) ?: return OpResult("Не удалось создать файл")
-                try {
-                    cr.openOutputStream(uri)?.use { out -> src.inputStream().use { it.copyTo(out) } }
-                        ?: throw IllegalStateException("нет записи")
-                    values.clear()
-                    values.put(MediaStore.MediaColumns.IS_PENDING, 0)
-                    cr.update(uri, values, null, null)
-                    OpResult(null, listOf(uri.toString()))
-                } catch (e: Exception) {
-                    cr.delete(uri, null, null)
-                    throw e
-                }
-            } else {
-                val dir = File(primaryPrefix + "Music/Maysk/").apply { mkdirs() }
-                val dest = uniqueFile(dir, displayName)
-                src.copyTo(dest, overwrite = false)
-                OpResult(null, listOf(dest.absolutePath))
-            }
-        } catch (e: Exception) {
-            OpResult("Сохранение: ${e.message ?: e.javaClass.simpleName}")
-        }
-    }
-
-
-    /**
-     * Кодирует аудио (или аудиодорожку видео) в MP3 через FFmpegKit (libmp3lame), 192 кбит/с.
-     * Если заданы [startMs] и [endMs] — вырезает этот фрагмент. Возвращает текст ошибки или null.
-     */
-    private fun encodeMp3(input: File, output: File, startMs: Long? = null, endMs: Long? = null): String? {
-        val args = mutableListOf("-y")
-        if (startMs != null && endMs != null) {
-            args += listOf("-ss", String.format(java.util.Locale.US, "%.3f", startMs / 1000.0))
-            args += listOf("-t", String.format(java.util.Locale.US, "%.3f", (endMs - startMs) / 1000.0))
-        }
-        args += listOf(
-            "-i", input.absolutePath,
-            "-vn", "-c:a", "libmp3lame", "-b:a", "192k", "-ar", "44100", "-ac", "2",
-            output.absolutePath,
-        )
-        return try {
-            val session = com.arthenica.ffmpegkit.FFmpegKit.executeWithArguments(args.toTypedArray())
-            if (com.arthenica.ffmpegkit.ReturnCode.isSuccess(session.returnCode)) null
-            else "Не удалось закодировать MP3 (код ${session.returnCode?.value})"
-        } catch (e: Throwable) {
-            "Ошибка MP3-кодера: ${e.message ?: e.javaClass.simpleName}"
-        }
-    }
-
-    /** Обрезка: remux AAC/M4A или перекодирование в AAC (для MP3 и др.). */
-    private fun cutAudioFile(input: File, output: File, startMs: Long, endMs: Long): String? {
-        val extractor = android.media.MediaExtractor()
-        try {
-            extractor.setDataSource(input.absolutePath)
-            val trackIdx = (0 until extractor.trackCount).firstOrNull { i ->
-                extractor.getTrackFormat(i).getString(android.media.MediaFormat.KEY_MIME)?.startsWith("audio/") == true
-            } ?: return "В файле нет аудиодорожки"
-            val format = extractor.getTrackFormat(trackIdx)
-            val mime = format.getString(android.media.MediaFormat.KEY_MIME) ?: ""
-            extractor.selectTrack(trackIdx)
-            if (output.exists()) output.delete()
-
-            // AAC в MP4-контейнере можно просто вырезать без перекодирования
-            if (mime.contains("mp4a") || mime == "audio/mp4") {
-                val err = remuxSegment(extractor, format, output, startMs, endMs)
-                if (err == null) return null
-            }
-            extractor.release()
-            return reencodeSegment(input, output, startMs, endMs)
-        } catch (e: Exception) {
-            return "Обрезка не удалась (${e.message})"
-        } finally {
-            try { extractor.release() } catch (_: Throwable) {}
-        }
-    }
-
-    private fun remuxSegment(
-        extractor: android.media.MediaExtractor,
-        format: android.media.MediaFormat,
-        output: File,
-        startMs: Long,
-        endMs: Long,
-    ): String? {
-        return try {
-            extractor.seekTo(startMs * 1000, android.media.MediaExtractor.SEEK_TO_CLOSEST_SYNC)
-            val muxer = android.media.MediaMuxer(output.absolutePath, android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-            val dstTrack = muxer.addTrack(format)
-            muxer.start()
-            val buf = java.nio.ByteBuffer.allocate(512 * 1024)
-            val info = android.media.MediaCodec.BufferInfo()
-            val endUs = endMs * 1000
-            var firstUs = -1L
-            while (true) {
-                info.offset = 0
-                info.size = extractor.readSampleData(buf, 0)
-                if (info.size < 0) break
-                val pts = extractor.sampleTime
-                if (pts > endUs) break
-                if (firstUs < 0) firstUs = pts
-                info.presentationTimeUs = (pts - firstUs).coerceAtLeast(0)
-                info.flags = extractor.sampleFlags
-                muxer.writeSampleData(dstTrack, buf, info)
-                extractor.advance()
-            }
-            muxer.stop()
-            muxer.release()
-            if (output.length() < 100) "Пустой файл" else null
-        } catch (e: Exception) {
-            e.message ?: "remux failed"
-        }
-    }
-
-    /** Декод → AAC 128k → M4A. Работает с MP3 и большинством форматов. */
-    private fun reencodeSegment(input: File, output: File, startMs: Long, endMs: Long): String? {
-        val extractor = android.media.MediaExtractor()
-        var decoder: android.media.MediaCodec? = null
-        var encoder: android.media.MediaCodec? = null
-        var muxer: android.media.MediaMuxer? = null
-        return try {
-            extractor.setDataSource(input.absolutePath)
-            val trackIdx = (0 until extractor.trackCount).firstOrNull { i ->
-                extractor.getTrackFormat(i).getString(android.media.MediaFormat.KEY_MIME)?.startsWith("audio/") == true
-            } ?: return "Нет аудиодорожки"
-            val inFormat = extractor.getTrackFormat(trackIdx)
-            val inMime = inFormat.getString(android.media.MediaFormat.KEY_MIME) ?: return "Неизвестный формат"
-            extractor.selectTrack(trackIdx)
-            extractor.seekTo(startMs * 1000, android.media.MediaExtractor.SEEK_TO_CLOSEST_SYNC)
-
-            val sampleRate = if (inFormat.containsKey(android.media.MediaFormat.KEY_SAMPLE_RATE))
-                inFormat.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE) else 44100
-            val channelCount = if (inFormat.containsKey(android.media.MediaFormat.KEY_CHANNEL_COUNT))
-                inFormat.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT) else 2
-
-            decoder = android.media.MediaCodec.createDecoderByType(inMime)
-            decoder.configure(inFormat, null, null, 0)
-            decoder.start()
-
-            val outFormat = android.media.MediaFormat.createAudioFormat(
-                android.media.MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, channelCount,
-            ).apply {
-                setInteger(android.media.MediaFormat.KEY_AAC_PROFILE, android.media.MediaCodecInfo.CodecProfileLevel.AACObjectLC)
-                setInteger(android.media.MediaFormat.KEY_BIT_RATE, 128_000)
-                setInteger(android.media.MediaFormat.KEY_MAX_INPUT_SIZE, 16384)
-            }
-            encoder = android.media.MediaCodec.createEncoderByType(android.media.MediaFormat.MIMETYPE_AUDIO_AAC)
-            encoder.configure(outFormat, null, null, android.media.MediaCodec.CONFIGURE_FLAG_ENCODE)
-            encoder.start()
-
-            val endUs = endMs * 1000L
-            var muxerTrack = -1
-            var muxerStarted = false
-            var inputDone = false
-            var outputDone = false
-            val timeoutUs = 10_000L
-            var firstPts = -1L
-
-            while (!outputDone) {
-                if (!inputDone) {
-                    val inIndex = decoder.dequeueInputBuffer(timeoutUs)
-                    if (inIndex >= 0) {
-                        val buf = decoder.getInputBuffer(inIndex)!!
-                        val sampleSize = extractor.readSampleData(buf, 0)
-                        val pts = extractor.sampleTime
-                        if (sampleSize < 0 || pts > endUs) {
-                            decoder.queueInputBuffer(inIndex, 0, 0, 0, android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                            inputDone = true
-                        } else {
-                            decoder.queueInputBuffer(inIndex, 0, sampleSize, pts, 0)
-                            extractor.advance()
-                        }
-                    }
-                }
-
-                // decoder → encoder
-                val decInfo = android.media.MediaCodec.BufferInfo()
-                val outIndex = decoder.dequeueOutputBuffer(decInfo, timeoutUs)
-                if (outIndex >= 0) {
-                    val decBuf = decoder.getOutputBuffer(outIndex)!!
-                    if (decInfo.size > 0 && decInfo.presentationTimeUs <= endUs) {
-                        var remaining = decInfo.size
-                        var offset = decInfo.offset
-                        while (remaining > 0) {
-                            val encIn = encoder.dequeueInputBuffer(timeoutUs)
-                            if (encIn >= 0) {
-                                val encBuf = encoder.getInputBuffer(encIn)!!
-                                val chunk = minOf(remaining, encBuf.capacity())
-                                encBuf.clear()
-                                decBuf.position(offset)
-                                decBuf.limit(offset + chunk)
-                                encBuf.put(decBuf)
-                                val ptsAdj = if (firstPts < 0) {
-                                    firstPts = decInfo.presentationTimeUs
-                                    0L
-                                } else (decInfo.presentationTimeUs - firstPts).coerceAtLeast(0)
-                                encoder.queueInputBuffer(encIn, 0, chunk, ptsAdj, 0)
-                                offset += chunk
-                                remaining -= chunk
-                            } else break
-                        }
-                    }
-                    val eos = decInfo.flags and android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
-                    decoder.releaseOutputBuffer(outIndex, false)
-                    if (eos) {
-                        val encIn = encoder.dequeueInputBuffer(timeoutUs)
-                        if (encIn >= 0) {
-                            encoder.queueInputBuffer(encIn, 0, 0, 0, android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                        }
-                    }
-                }
-
-                val encInfo = android.media.MediaCodec.BufferInfo()
-                val encOut = encoder.dequeueOutputBuffer(encInfo, timeoutUs)
-                when {
-                    encOut == android.media.MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                        if (!muxerStarted) {
-                            muxer = android.media.MediaMuxer(output.absolutePath, android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-                            muxerTrack = muxer!!.addTrack(encoder.outputFormat)
-                            muxer!!.start()
-                            muxerStarted = true
-                        }
-                    }
-                    encOut >= 0 -> {
-                        val encBuf = encoder.getOutputBuffer(encOut)!!
-                        if (encInfo.size > 0 && muxerStarted &&
-                            encInfo.flags and android.media.MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0
-                        ) {
-                            muxer!!.writeSampleData(muxerTrack, encBuf, encInfo)
-                        }
-                        val eos = encInfo.flags and android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
-                        encoder.releaseOutputBuffer(encOut, false)
-                        if (eos) outputDone = true
-                    }
-                }
-            }
-
-            try { muxer?.stop() } catch (_: Throwable) {}
-            muxer?.release()
-            if (output.length() < 100) "Пустой результат перекодирования" else null
-        } catch (e: Exception) {
-            "Перекодирование: ${e.message}"
-        } finally {
-            try { decoder?.stop(); decoder?.release() } catch (_: Throwable) {}
-            try { encoder?.stop(); encoder?.release() } catch (_: Throwable) {}
-            try { extractor.release() } catch (_: Throwable) {}
-        }
-    }
-
-    private fun extractAudioTrack(input: File, output: File): String? {
-        val extractor = android.media.MediaExtractor()
-        return try {
-            extractor.setDataSource(input.absolutePath)
-            val track = (0 until extractor.trackCount).firstOrNull { i ->
-                extractor.getTrackFormat(i).getString(android.media.MediaFormat.KEY_MIME)?.startsWith("audio/") == true
-            } ?: return "В видео нет аудиодорожки"
-            extractor.selectTrack(track)
-            val format = extractor.getTrackFormat(track)
-            if (output.exists()) output.delete()
-            val muxer = android.media.MediaMuxer(output.absolutePath, android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-            val dstTrack = muxer.addTrack(format)
-            muxer.start()
-            val buf = java.nio.ByteBuffer.allocate(256 * 1024)
-            val info = android.media.MediaCodec.BufferInfo()
-            while (true) {
-                info.offset = 0
-                info.size = extractor.readSampleData(buf, 0)
-                if (info.size < 0) break
-                info.presentationTimeUs = extractor.sampleTime
-                info.flags = extractor.sampleFlags
-                muxer.writeSampleData(dstTrack, buf, info)
-                extractor.advance()
-            }
-            muxer.stop()
-            muxer.release()
-            if (output.length() < 100) return "Пустой результат"
-            null
-        } catch (e: Exception) {
-            "Не удалось извлечь аудио: ${e.message}"
-        } finally {
-            try { extractor.release() } catch (_: Throwable) {}
-        }
     }
 }
