@@ -40,6 +40,8 @@ data class PlaybackState(
     /** mediaId по индексу окна. */
     val items: List<String> = emptyList(),
     val currentIndex: Int = -1,
+    val countedPlays: Int = 0,
+    val countedTarget: Int = 0,
 ) {
     val hasMedia: Boolean get() = items.isNotEmpty()
 }
@@ -63,6 +65,8 @@ class PlayerController(
     private var pollJob: Job? = null
     private var pendingAction: (() -> Unit)? = null
     private var restored = false
+    private var countedTarget = 0
+    private var countedPlays = 0
 
     // Интернет-радио: список адресов потока (основной + резервные) и текущий индекс.
     private var streamUrls: List<String> = emptyList()
@@ -90,7 +94,22 @@ class PlayerController(
             controller = c
             c.addListener(object : Player.Listener {
                 override fun onEvents(player: Player, events: Player.Events) { refresh() }
-                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) { onTrackChanged() }
+                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                    if (countedTarget > 0) { countedTarget = 0; countedPlays = 0 }
+                    onTrackChanged()
+                }
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_ENDED && countedTarget > 0) {
+                        countedPlays++
+                        if (countedPlays < countedTarget) {
+                            controller?.seekTo(0, 0)
+                            controller?.play()
+                        } else {
+                            countedTarget = 0
+                            refresh()
+                        }
+                    }
+                }
                 override fun onPlayerError(error: PlaybackException) { onStreamError(error) }
                 override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                     if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) onEndOfTrackPause()
@@ -154,6 +173,8 @@ class PlayerController(
             order = if (order.size == items.size) order else items.indices.toList(),
             items = items,
             currentIndex = c.currentMediaItemIndex,
+            countedPlays = countedPlays,
+            countedTarget = countedTarget,
         )
         _position.value = c.currentPosition
     }
@@ -301,6 +322,25 @@ class PlayerController(
                 else -> Player.REPEAT_MODE_OFF
             }
         }
+    }
+
+    /** Запускает текущий трек заданное общее число раз. */
+    fun playCurrentCounted(total: Int) {
+        val c = controller ?: return
+        if (c.currentMediaItem == null || total < 1) return
+        c.repeatMode = Player.REPEAT_MODE_OFF
+        countedTarget = total.coerceAtMost(10_000)
+        countedPlays = 0
+        c.seekTo(c.currentMediaItemIndex, 0)
+        c.prepare()
+        c.play()
+        refresh()
+    }
+
+    fun stopCountedRepeat() {
+        countedTarget = 0
+        countedPlays = 0
+        refresh()
     }
 
     fun release() {

@@ -47,6 +47,39 @@ object FileOps {
 
     private val TAG_EXT = setOf("mp3", "flac", "ogg", "oga", "opus", "m4a", "m4b", "mp4", "aac", "wav", "wma", "aif", "aiff", "dsf")
 
+    /** Склеивает выбранные дорожки в заданном порядке и сохраняет MP3 в Music/Maysk/. */
+    fun concatenateTracks(context: Context, tracks: List<Track>, repeatEach: Int, customName: String): OpResult {
+        if (tracks.isEmpty()) return OpResult("Выберите хотя бы один трек")
+        if (repeatEach !in 1..100) return OpResult("Количество повторов должно быть от 1 до 100")
+        val sources = mutableListOf<File>()
+        val output = File(context.cacheDir, "joined_${System.currentTimeMillis()}.mp3")
+        return try {
+            val expanded = tracks.flatMap { track -> List(repeatEach) { track } }
+            expanded.forEachIndexed { index, track ->
+                val file = File(context.cacheDir, "join_${System.currentTimeMillis()}_$index.${track.extension.ifBlank { "audio" }}")
+                sources += file
+                context.contentResolver.openInputStream(track.uri)?.use { input -> file.outputStream().use { out -> input.copyTo(out) } }
+                    ?: return OpResult("Не удалось прочитать файл: ${track.title}")
+            }
+            val args = mutableListOf("-y")
+            sources.forEach { args += listOf("-i", it.absolutePath) }
+            val normalizedInputs = sources.indices.joinToString(";") { "[$it:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo[a$it]" }
+            val concatInputs = sources.indices.joinToString("") { "[a$it]" }
+            args += listOf("-filter_complex", "$normalizedInputs;$concatInputs concat=n=${sources.size}:v=0:a=1[out]", "-map", "[out]", "-c:a", "libmp3lame", "-b:a", "192k", output.absolutePath)
+            val session = com.arthenica.ffmpegkit.FFmpegKit.executeWithArguments(args.toTypedArray())
+            if (!com.arthenica.ffmpegkit.ReturnCode.isSuccess(session.returnCode) || output.length() < 100) {
+                return OpResult("Не удалось склеить аудио (код ${session.returnCode?.value})")
+            }
+            val base = customName.trim().replace(Regex("[\\\\/:*?\"<>|]"), "_").trim('.').ifBlank { "Склеенная музыка" }
+            saveAudioToMusic(context, output, "${base.removeSuffix(".mp3")}.mp3", "audio/mpeg")
+        } catch (e: Throwable) {
+            OpResult("Ошибка склейки: ${e.message ?: e.javaClass.simpleName}")
+        } finally {
+            sources.forEach { it.delete() }
+            output.delete()
+        }
+    }
+
     fun canEditTags(t: Track): Boolean = t.extension in TAG_EXT
 
     /** Читает текущие теги файла (для формы редактирования). Если не удалось — берёт данные из библиотеки. */

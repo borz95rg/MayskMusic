@@ -66,6 +66,8 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -75,6 +77,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -147,6 +150,8 @@ fun PlayerScreen(onClose: () -> Unit) {
     var showTimer by remember { mutableStateOf(false) }
     var showDetails by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
+    var showCountDialog by remember { mutableStateOf(false) }
+    var repeatCountInput by remember { mutableStateOf("30") }
 
     // Перетаскивание ползунка
     var seeking by remember { mutableStateOf(false) }
@@ -208,6 +213,11 @@ fun PlayerScreen(onClose: () -> Unit) {
             }
 
             // Прогресс
+            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (state.countedTarget > 0) "Повтор: ${state.countedPlays}/${state.countedTarget}" else "Повторить трек заданное число раз", color = c.textDim, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                TextButton(onClick = { showCountDialog = true }) { Text(if (state.countedTarget > 0) "Изменить" else "Задать") }
+                if (state.countedTarget > 0) TextButton(onClick = { player.stopCountedRepeat() }) { Text("Стоп") }
+            }
             val dur = state.durationMs.coerceAtLeast(1L)
             val shown = if (seeking) seekValue else (position.toFloat() / dur).coerceIn(0f, 1f)
             Slider(
@@ -301,6 +311,20 @@ fun PlayerScreen(onClose: () -> Unit) {
     if (showQueue) QueueSheet { showQueue = false }
     if (showTimer) SleepTimerDialog { showTimer = false }
     if (showDetails && track != null) TrackDetailsDialog(track) { showDetails = false }
+    if (showCountDialog) AlertDialog(
+        onDismissRequest = { showCountDialog = false },
+        title = { Text("Повторить трек") },
+        text = { Column {
+            Text("Сколько раз проиграть текущий трек? После последнего раза воспроизведение остановится.")
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(value = repeatCountInput, onValueChange = { repeatCountInput = it.filter(Char::isDigit).take(5) }, label = { Text("Количество") }, singleLine = true)
+        } },
+        confirmButton = { Button(onClick = {
+            repeatCountInput.toIntOrNull()?.takeIf { it > 0 }?.let { player.playCurrentCounted(it) }
+            showCountDialog = false
+        }, enabled = (repeatCountInput.toIntOrNull() ?: 0) > 0 && state.hasMedia) { Text("Начать") } },
+        dismissButton = { TextButton(onClick = { showCountDialog = false }) { Text("Отмена") } },
+    )
 }
 
 @Composable

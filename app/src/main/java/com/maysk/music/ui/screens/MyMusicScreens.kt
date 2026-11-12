@@ -49,6 +49,10 @@ import androidx.compose.material.icons.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.VideoFile
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -56,6 +60,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -68,6 +73,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import com.maysk.music.data.Track
 import com.maysk.music.data.formatTime
 import com.maysk.music.ui.LocalActions
@@ -85,6 +91,11 @@ import com.maysk.music.ui.components.TopBar
 import com.maysk.music.ui.theme.LocalMaysk
 import com.maysk.music.ui.theme.LocalUi
 import java.util.Calendar
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.rememberCoroutineScope
+import com.maysk.music.data.FileOps
 
 private data class Tile(val title: String, val sub: String?, val icon: ImageVector, val tint: Color, val action: () -> Unit)
 
@@ -97,6 +108,7 @@ fun MyMusicScreen() {
     val history by a.container.userData.history.collectAsState()
     val sleep by a.container.sleepTimer.state.collectAsState()
     var timer by remember { mutableStateOf(false) }
+    var joinDialog by remember { mutableStateOf(false) }
     val cols = if (LocalUi.current.simpleMode) 2 else 3
 
     val tiles = listOf(
@@ -111,6 +123,7 @@ fun MyMusicScreen() {
         Tile("Исполнители", "${lib.artists.size}", Icons.Rounded.Person, c.accent2) { a.nav.push(Route.LibraryTab(2)) },
         Tile("Жанры", "${lib.genres.size}", Icons.Rounded.Category, Color(0xFFF97316)) { a.nav.push(Route.LibraryTab(3)) },
         Tile("Обрезать трек", null, Icons.Rounded.ContentCut, Color(0xFFEC4899)) { a.nav.push(Route.Trim()) },
+        Tile("Склеить треки", null, Icons.Rounded.ContentCopy, Color(0xFF38BDF8)) { joinDialog = true },
         Tile("Из видео", null, Icons.Rounded.VideoFile, Color(0xFF8B5CF6)) { a.nav.push(Route.ExtractAudio) },
         Tile("Статистика", null, Icons.Rounded.BarChart, c.accent3) { a.nav.push(Route.Stats) },
         Tile("Эквалайзер", null, Icons.Rounded.Equalizer, c.accent) { a.nav.push(Route.Equalizer) },
@@ -134,6 +147,67 @@ fun MyMusicScreen() {
         }
     }
     if (timer) SleepTimerDialog { timer = false }
+    if (joinDialog) JoinTracksDialog(lib.tracks, onDismiss = { joinDialog = false })
+}
+
+@Composable
+private fun JoinTracksDialog(tracks: List<Track>, onDismiss: () -> Unit) {
+    val a = LocalActions.current
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val selected = remember { mutableStateListOf<Long>() }
+    var repeatText by remember { mutableStateOf("1") }
+    var fileName by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    val chosen = tracks.filter { it.id in selected }
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("Склеить музыку") },
+        text = {
+            Column {
+                Text("Выберите треки в порядке склейки. Для одного трека укажите число копий (до 100). Результат сохранится как MP3 в Music/Maysk/.", style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = repeatText, onValueChange = { repeatText = it.filter(Char::isDigit).take(3) }, label = { Text("Сколько раз каждый трек") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = fileName, onValueChange = { fileName = it }, label = { Text("Имя итогового файла") }, placeholder = { Text(chosen.joinToString(" + ") { it.title }.take(60)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(8.dp))
+                LazyColumn(Modifier.height(300.dp)) {
+                    items(tracks, key = { it.id }) { track ->
+                        Row(Modifier.fillMaxWidth().clickable {
+                            if (track.id in selected) selected.remove(track.id) else selected.add(track.id)
+                            if (selected.isNotEmpty()) fileName = selected.mapNotNull { id -> tracks.firstOrNull { it.id == id }?.title }.joinToString(" + ").take(80)
+                        }, verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = track.id in selected, onCheckedChange = { checked ->
+                                if (checked) selected.add(track.id) else selected.remove(track.id)
+                                fileName = selected.mapNotNull { id -> tracks.firstOrNull { it.id == id }?.title }.joinToString(" + ").take(80)
+                            })
+                            Column {
+                                Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(track.artist, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+                if (busy) Text("Склеиваю аудио…", modifier = Modifier.padding(top = 8.dp))
+            }
+        },
+        confirmButton = {
+            Button(enabled = !busy && chosen.isNotEmpty() && (repeatText.toIntOrNull() ?: 0) in 1..100,
+                onClick = {
+                    val name = fileName.ifBlank { chosen.joinToString(" + ") { it.title } }
+                    busy = true
+                    scope.launch {
+                        val result = withContext(Dispatchers.IO) { FileOps.concatenateTracks(ctx, chosen, repeatText.toInt(), name) }
+                        busy = false
+                        if (result.error != null) a.toast(result.error) else {
+                            a.toast("Сохранено в Music/Maysk/")
+                            a.container.library.rescan(debounceMs = 800)
+                            onDismiss()
+                        }
+                    }
+                }) { Text(if (busy) "Обработка…" else "Склеить и сохранить") }
+        },
+        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text("Отмена") } },
+    )
 }
 
 // ---------------------------------------------------------------------------
